@@ -104,6 +104,7 @@ static struct wl_event_source *g_render_idle, *g_fallback_timer, *g_frame_timer,
 static int g_dirty, g_fallback_armed;
 static int64_t g_tick_ns, g_rendered_tick_ns, g_last_vsync_ns, g_min_interval_ns, g_fps_since_ns;
 static int g_refresh_mhz = 60000;
+static int g_refresh_candidate_hz, g_refresh_candidate_seconds;
 static unsigned g_frames, g_stat_frames, g_stat_dmabuf, g_stat_shm, g_stats_ticks;
 
 static struct seat_resource g_ptrs[MAX_SEAT_RESOURCES], g_kbs[MAX_SEAT_RESOURCES], g_touches[MAX_SEAT_RESOURCES];
@@ -1662,14 +1663,33 @@ static int on_msg(int fd, uint32_t mask, void *data) {
     return 0;
 }
 
+/* The panel rate a shortest vsync interval belongs to, or 0 when it is none (a late or early vsync). */
+static int panel_rate_hz(int64_t interval_ns) {
+    static const int rates[] = {24, 30, 48, 50, 60, 72, 75, 90, 96, 100, 120, 144, 165, 240};
+    const int64_t mhz = 1000000000000LL / interval_ns;
+    for (size_t i = 0; i < sizeof rates / sizeof rates[0]; i++) {
+        const int64_t diff = mhz - rates[i] * 1000LL;
+        if ((diff < 0 ? -diff : diff) <= rates[i] * 40LL) return rates[i];
+    }
+    return 0;
+}
+
 static int on_stats_timer(void *data) {
     const int64_t now = now_ns(), elapsed = now - g_fps_since_ns;
     atomic_store(&g_fps_milli, elapsed > 0 ? (int)((double)g_frames * 1e12 / (double)elapsed) : 0);
     g_frames = 0;
     g_fps_since_ns = now;
     if (g_min_interval_ns > 0) {
-        const int hz = (int)(1e9 / (double)g_min_interval_ns + 0.5);
-        if (hz >= 20 && hz <= 240 && hz * 1000 != g_refresh_mhz) {
+        /* Only a faster panel rate, measured two seconds running, is announced. Android drops the panel to 60 Hz
+           whenever it can - the notification shade, for one - and each new rate made gamescope and the game rebuild
+           their presentation, which flashed black. Frames keep following the panel's real vsync either way. */
+        const int hz = panel_rate_hz(g_min_interval_ns);
+        if (hz * 1000 <= g_refresh_mhz) {
+            g_refresh_candidate_hz = 0;
+        } else if (hz != g_refresh_candidate_hz) {
+            g_refresh_candidate_hz = hz;
+            g_refresh_candidate_seconds = 1;
+        } else if (++g_refresh_candidate_seconds >= 2) {
             g_refresh_mhz = hz * 1000;
             LOGI("screen refresh %d Hz", hz);
             outputs_changed();
@@ -1724,6 +1744,8 @@ static void *comp_main(void *arg) {
     g_render_idle = g_fallback_timer = g_frame_timer = g_stats_timer = NULL;
     g_dirty = g_fallback_armed = 0;
     g_tick_ns = g_rendered_tick_ns = g_last_vsync_ns = g_min_interval_ns = 0;
+    g_refresh_mhz = 60000;
+    g_refresh_candidate_hz = g_refresh_candidate_seconds = 0;
     g_cursor_surface = NULL;
     g_active_constraint = NULL;
     g_ptr_placed = g_raw_valid = 0;
