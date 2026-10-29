@@ -6,3 +6,4 @@ local.properties
 .cxx/
 app/src/main/jniLibs/arm64-v8a/libproot*.so
 runtime/out/
+runtime/out-build.log

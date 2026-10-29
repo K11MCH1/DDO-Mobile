@@ -38,5 +38,7 @@
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
             android:windowSoftInputMode="adjustNothing|stateHidden"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboard|keyboardHidden|navigation|uiMode" />
+
+        <service android:name=".session.GameService" android:exported="false" />
     </application>
 </manifest>

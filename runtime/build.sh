@@ -16,6 +16,13 @@ mkdir -p "$out/cache" "$root/var/lib/pacman"
 # DroidDeck-style runtimes have no 'alpm' user, and proot cannot drop privileges for the download sandbox.
 sed -e 's/^DownloadUser/#DownloadUser/' -e 's/^CheckSpace/#CheckSpace/' /etc/pacman.conf > "$conf"
 grep -q '^DisableSandbox' "$conf" || sed -i 's/^\[options\]/[options]\nDisableSandbox/' "$conf"
+# Packages are verified against the Arch Linux ARM signing keys, in a keyring of the build's own.
+gpgdir=$out/gnupg
+sed -i "s#^\[options\]#[options]\nGPGDir = $gpgdir#" "$conf"
+if [ ! -s "$gpgdir/pubring.gpg" ] && [ ! -s "$gpgdir/pubring.kbx" ]; then
+  pacman-key --config "$conf" --gpgdir "$gpgdir" --init
+  pacman-key --config "$conf" --gpgdir "$gpgdir" --populate archlinuxarm
+fi
 
 step "build tools"
 command -v gcc >/dev/null || pacman --config "$conf" -Sy --noconfirm --needed gcc

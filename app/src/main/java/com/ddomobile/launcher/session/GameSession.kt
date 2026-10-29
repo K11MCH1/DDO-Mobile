@@ -30,6 +30,7 @@ object GameSession {
     val state: StateFlow<State> = mutableState
 
     @Volatile private var process: Process? = null
+    @Volatile private var audio: AudioServer? = null
 
     val running: Boolean get() = state.value is State.Running
 
@@ -61,7 +62,11 @@ object GameSession {
             return
         }
 
+        val audio = AudioServer(app).also { it.start(log) }
+        this.audio = audio
+
         val env = linkedMapOf(
+            "PULSE_SERVER" to audio.guestServer,
             "PATH" to "/usr/local/sbin:/usr/local/bin:/usr/bin",
             "HOME" to "/root",
             "LANG" to "C.UTF-8",
@@ -87,17 +92,21 @@ object GameSession {
         } catch (e: Exception) {
             Log.e(TAG, "proot did not start", e)
             log.appendText("proot did not start: ${e.message}\n")
+            audio.stop()
             Compositor.nativeStop()
             mutableState.value = State.Ended(-1, log)
             return
         }
         process = proc
+        GameService.start(app)
         mutableState.value = State.Running(width, height, log)
         Thread({
             val code = runCatching { proc.waitFor() }.getOrDefault(-1)
             Log.i(TAG, "session ended with $code")
             process = null
+            audio.stop()
             Compositor.nativeStop()
+            GameService.stop(app)
             mutableState.value = State.Ended(code, log)
         }, "ddo-session-wait").start()
     }
