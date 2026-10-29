@@ -29,9 +29,6 @@ import com.ddomobile.launcher.input.Keys
 import com.ddomobile.launcher.input.TouchControls
 import com.ddomobile.launcher.session.GameSession
 
-/** Highest panel refresh the game asks for: past this the rate only costs battery. */
-private const val MAX_REFRESH_HZ = 120f
-
 /** The game on screen: the compositor's surface, DDO's touch layer, and keyboard / mouse pass-through. */
 class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
     private lateinit var surface: SurfaceView
@@ -44,8 +41,9 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
     private var watching = true
 
     /**
-     * The panel's fastest mode up to 120 Hz at the current resolution. Left alone, Android drops the panel to 60 Hz
-     * whenever it judges the content slow, and gamescope then paces the game to that.
+     * The panel's fastest mode at the current resolution (120 Hz on the iQOO 11, 144 Hz on the RedMagic 11 Pro). Left
+     * alone, Android drops the panel to 60 Hz whenever it judges the content slow, and gamescope then paces the game
+     * to that.
      */
     private fun fastestDisplayMode(): Int? {
         @Suppress("DEPRECATION")
@@ -53,7 +51,6 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
         val current = display.mode
         return display.supportedModes
             .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
-            .filter { it.refreshRate <= MAX_REFRESH_HZ + 1 }
             .maxByOrNull { it.refreshRate }
             ?.modeId
     }
