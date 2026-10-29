@@ -80,6 +80,8 @@ object GameSession {
             "TMPDIR" to "/tmp",
         )
         drivers.selectedLinux()?.let { env["VK_ICD_FILENAMES"] = drivers.linuxIcd(it) }
+        // Turnip renders straight to memory: its tiled (GMEM) path is not mature enough yet to trust with the game.
+        env["TU_DEBUG"] = "sysmem"
         val binds = proot.binds()
         val fastPath = if (File(paths.rootfs, "usr/local/lib/libddofastpath.so").isFile) proot.fastPathKey(binds) else null
         fastPath?.let { env.putAll(proot.fastPathGuestEnv(binds, it)) }
