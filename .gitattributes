@@ -3,3 +3,4 @@
 *.jar binary
 *.p12 binary
 *.so binary
+*.keymap text eol=crlf

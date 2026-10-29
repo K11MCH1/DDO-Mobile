@@ -16,6 +16,7 @@ object Keys {
     const val R = 19
     const val T = 20
     const val I = 23
+    const val K = 37
     const val ENTER = 28
     const val LEFTCTRL = 29
     const val A = 30

@@ -1,0 +1,372 @@
+# This section gets filled out on end-user machines if they have
+# additional input devices connected. The keyboard is ALWAYS device 0
+# and the mouse is ALWAYS device 1 so these don't have to be listed,
+# but I support listing them anyway since that tends to make things
+# clear when figuring out what index to use in your control.
+# Normally the guid has the form
+# DWORD WORD WORD BYTE BYTE BYTE BYTE BYTE BYTE BYTE BYTE.
+# They can be listed in hex or decimal.
+#
+# To define your own meta keys you can edit the following table. The
+# first entry is which meta-key bit you are defining, this number must
+# be between 1 and 32.  The second number is a device index from the
+# table above, for example 0 is your keyboard and 1 is your mouse.
+# The third number is the identifier for which button is used for the
+# key.  Note that multiple keys can toggle the same meta-key bit, for
+# example both the left and right keyboard keys toggle the same bit.
+# Later in the Bindings table you can specify that one or more
+# meta-keys are required by combining the bits from the MetaKeys
+# table, for example Control+Alt would use a value of 0x06.  Note that
+# only buttons can be used as meta-keys, you cannot use Axis, Slider,
+# or POV controls as meta-keys.
+#
+# Device is an index from the device table. KeyIndex is a matching
+# DIK_*, DIMOFS_*, or DIJOFS_* define (see DInput.h for possible
+# values) depending on whether the device is a Keyboard, Mouse, or
+# Joystick/Gamepad.  Controls can be modidied by an optional MetaKey
+# value, this value is an integer which combines any number of the
+#  bits defined in the MetaKeys table.  The same button can be defined
+# with different meta-key values but not with exactly the same
+# meta-key modifiers.  When selecting an action in response to user
+# input the action that matches the largest number of modifiers is
+# the action that gets selected.  For example, if I define an action
+# for X, Shift+X, and Control+X and then I enter Alt+Shift+X this
+# will match the Shift+X action.  If two or more actions match the
+# same number of bits then the action with the lowest index wins.
+# Using the previous example, if I pressed Ctrl+Shift+X it will match
+# Shift+X and not Control+X because shift is assigned a lower index
+# in the MetaKeys table above (shift is index 1, control is index 2).
+# ActivationType is a modifier for how the button is pressed, for
+# example you can say Up, Down, DblClick, Tap, or Analog.  You can
+# modify DblClick with the keyword Nearby to indicate that you only
+# want a double click to count if the mouse cursor hasn't moved very
+# far.  You can combine these bits to get notifed of multiple events.
+# By default you get Down and Up.  Note that a "Tap" is also a
+# ButtonUp, the tap is just a modifier.  Also note that DblClick is
+#  also a ButtonDown.  No two controls can register for the exact same
+# Activation of the same control but you can have different actions
+# for ButtonDown and DblClick, or ButtonUp and Tap.  Oh, SubControl
+# is used for forming virtual buttons from sub-ranges of an analog
+# control, valid values are POVUp, POVRight, POVDown, POVLeft,
+# AxisPositive, and AxisNegative.
+"User Defined Keymap" [ 00000000-0000-0000-0000-000000000000 ]
+
+Devices
+[
+  Keyboard [ GUID_SysKeyboard ]
+  Mouse [ GUID_SysMouse ]
+  Virtual [ GUID_Virtual ]
+  Joystick [ GUID_SysJoystick ]
+  Joystick [ GUID_XInput1 ]
+  Joystick [ GUID_XInput2 ]
+  Joystick [ GUID_XInput3 ]
+  Joystick [ GUID_XInput4 ]
+]
+
+MetaKeys
+[
+  1 [ 0 DIK_LSHIFT ]
+  1 [ 0 DIK_RSHIFT ]
+  2 [ 0 DIK_LCONTROL ]
+  2 [ 0 DIK_RCONTROL ]
+  4 [ 0 DIK_LWIN ]
+  4 [ 0 DIK_RWIN ]
+  5 [ 1 DIMOFS_BUTTON3 ]
+  6 [ 1 DIMOFS_BUTTON4 ]
+  7 [ 1 DIMOFS_BUTTON0 ]
+  8 [ 1 DIMOFS_BUTTON1 ]
+  3 [ 0 DIK_LALT ]
+  3 [ 0 DIK_RALT ]
+  16 [ 4 DIJOFS_BUTTON5 ]
+]
+
+Bindings
+[
+  Main
+  [
+    CaptureScreenshot [ Old [ 0 DIK_SYSRQ ] ]
+    SHORTCUT_BOTTOM_2_KEY [ Old [ 4 DIJOFS_POV0 POVUp ] ]
+    SHORTCUT_BOTTOM_1_KEY [ Old [ 4 DIJOFS_POV0 POVLeft ] ]
+    SHORTCUT_BOTTOM_3_KEY [ Old [ 4 DIJOFS_POV0 POVDown ] ]
+    SHORTCUT_BOTTOM_4_KEY [ Old [ 4 DIJOFS_POV0 POVRight ] ]
+    SHORTCUT_BAR_1_KEY [ Old [ 4 DIJOFS_POV0 POVLeft ] 0x00008000 ]
+    SHORTCUT_BAR_2_KEY [ Old [ 4 DIJOFS_POV0 POVUp ] 0x00008000 ]
+    SHORTCUT_BAR_3_KEY [ Old [ 4 DIJOFS_POV0 POVDown ] 0x00008000 ]
+    SHORTCUT_BAR_4_KEY [ Old [ 4 DIJOFS_POV0 POVRight ] 0x00008000 ]
+    UserMetaKey [ Old [ 4 DIJOFS_BUTTON5 ] ]
+    MovementForward [ Old [ 4 DIJOFS_Y AxisNegative ] ]
+    MovementBackup [ Old [ 4 DIJOFS_Y AxisPositive ] ]
+    MovementTurnOrStrafeRight [ Old [ 4 DIJOFS_X AxisPositive ] ]
+    MovementTurnOrStrafeLeft [ Old [ 4 DIJOFS_X AxisNegative ] ]
+    MovementRunLock [ Old [ 4 "DIJOFS_BUTTON(6)" ] ]
+    MovementLongJump [ Old [ 4 "DIJOFS_BUTTON(8)" ] ]
+    CameraToggleMouseSteer [ Old [ 4 "DIJOFS_BUTTON(7)" ] ]
+    Interact [ Old [ 4 "DIJOFS_BUTTON(0)" ] ]
+    Block [ Old [ 4 DIJOFS_Z AxisPositive ] ]
+    ToggleMapPanel [ Old [ 4 "DIJOFS_BUTTON(6)" ] 0x00008000 ]
+    SHOW_DUNGEON_SUMMARY_KEY [ Old [ 4 "DIJOFS_BUTTON(7)" ] 0x00008000 ]
+    EXAMINE_ITEM_KEY [ Old [ 4 DIJOFS_BUTTON2 ] ]
+    SelectNextCombatTarget [ Old [ 4 "DIJOFS_BUTTON(4)" ] ]
+    SelectNextNonCombatTarget [ Old [ 4 "DIJOFS_BUTTON(4)" ] 0x00008000 ]
+    TARGET_FELLOW_2_KEY [ Old [ 4 DIJOFS_BUTTON2 ] 0x00008000 ]
+    TARGET_FELLOW_3_KEY [ Old [ 4 "DIJOFS_BUTTON(3)" ] 0x00008000 ]
+    TARGET_FELLOW_4_KEY [ Old [ 4 "DIJOFS_BUTTON(0)" ] 0x00008000 ]
+    TARGET_FELLOW_5_KEY [ Old [ 4 DIJOFS_BUTTON1 ] 0x00008000 ]
+    AlternateEscapeKey [ Old [ 4 DIJOFS_BUTTON1 ] ]
+    AbsPointerLeft [ Old [ 4 DIJOFS_RX AxisNegative ] ]
+    AbsPointerRight [ Old [ 4 DIJOFS_RX AxisPositive ] ]
+    AbsPointerUp [ Old [ 4 DIJOFS_RY AxisNegative ] ]
+    AbsPointerDown [ Old [ 4 DIJOFS_RY AxisPositive ] ]
+    AlternateSelectRight [ Old [ 4 DIJOFS_RZ AxisPositive ] ]
+    AlternateSelectLeft [ Old [ 4 DIJOFS_BUTTON9 ] ]
+    Interact [ Old [ 0 DIK_E ] ]
+    Interact [ Old [ 0 DIK_U ] ]
+    CameraInstantMouseLook [ Old [ 1 DIMOFS_BUTTON2 ] ]
+    CameraToggleMouseSteer [ Old [ 0 DIK_T ] ]
+    AutoTargetToggle [ Old [ 0 DIK_G ] ]
+    ADMIN_PANEL_KEY [ Old [ 0 DIK_A ] 0x00000002 ]
+    CreateAdminUI [ Old [ 0 DIK_Z ] 0x00000002 ]
+    MovementLongJump [ Old [ 0 DIK_SPACE ] ]
+    MovementForward [ Old [ 0 DIK_W ] ]
+    MovementBackup [ Old [ 0 DIK_S ] ]
+    MovementTurnOrStrafeLeft [ Old [ 0 DIK_A ] ]
+    MovementTurnOrStrafeRight [ Old [ 0 DIK_D ] ]
+    MovementTurnOrStrafeLeft [ Old [ 0 DIK_LEFTARROW ] ]
+    MovementTurnOrStrafeRight [ Old [ 0 DIK_RIGHTARROW ] ]
+    Block [ Old [ 0 DIK_LSHIFT ] ]
+    ChargeRunearm [ Old [ 0 DIK_LALT ] ]
+    SelectNearestCombatTarget [ Old [ 0 DIK_GRAVE ] ]
+    SelectNextCombatTarget [ Old [ 0 DIK_TAB ] ]
+    SelectPrevCombatTarget [ Old [ 0 DIK_TAB ] 0x00000002 ]
+    SelectNextNonCombatTarget [ Old [ 0 DIK_Q ] ]
+    SelectNextNonCombatTarget [ Old [ 0 DIK_BACK ] ]
+    SelectPrevNonCombatTarget [ Old [ 0 DIK_BACK ] 0x00000002 ]
+    SelectPrevNonCombatTarget [ Old [ 0 DIK_Q ] 0x00000002 ]
+    MovementRunLock [ Old [ 0 DIK_R ] ]
+    MovementRunLock [ Old [ 1 DIMOFS_BUTTON4 ] ]
+    SHORTCUT_BOTTOM_1_KEY [ Old [ 0 DIK_1 ] ]
+    SHORTCUT_BOTTOM_2_KEY [ Old [ 0 DIK_2 ] ]
+    SHORTCUT_BOTTOM_3_KEY [ Old [ 0 DIK_3 ] ]
+    SHORTCUT_BOTTOM_4_KEY [ Old [ 0 DIK_4 ] ]
+    SHORTCUT_BOTTOM_5_KEY [ Old [ 0 DIK_5 ] ]
+    SHORTCUT_BOTTOM_6_KEY [ Old [ 0 DIK_6 ] ]
+    SHORTCUT_BOTTOM_7_KEY [ Old [ 0 DIK_7 ] ]
+    SHORTCUT_BOTTOM_8_KEY [ Old [ 0 DIK_8 ] ]
+    SHORTCUT_BOTTOM_9_KEY [ Old [ 0 DIK_9 ] ]
+    SHORTCUT_BOTTOM_10_KEY [ Old [ 0 DIK_0 ] ]
+    SHORTCUT_BAR_1_KEY [ Old [ 0 DIK_1 ] 0x00000002 ]
+    SHORTCUT_BAR_2_KEY [ Old [ 0 DIK_2 ] 0x00000002 ]
+    SHORTCUT_BAR_3_KEY [ Old [ 0 DIK_3 ] 0x00000002 ]
+    SHORTCUT_BAR_4_KEY [ Old [ 0 DIK_4 ] 0x00000002 ]
+    SHORTCUT_BAR_5_KEY [ Old [ 0 DIK_5 ] 0x00000002 ]
+    SHORTCUT_BAR_6_KEY [ Old [ 0 DIK_6 ] 0x00000002 ]
+    SHORTCUT_BAR_7_KEY [ Old [ 0 DIK_7 ] 0x00000002 ]
+    SHORTCUT_BAR_8_KEY [ Old [ 0 DIK_8 ] 0x00000002 ]
+    SHORTCUT_BAR_9_KEY [ Old [ 0 DIK_9 ] 0x00000002 ]
+    SHORTCUT_BAR_10_KEY [ Old [ 0 DIK_0 ] 0x00000002 ]
+    SHORTCUT_HIDE_KEY [ Old [ 0 DIK_NUMPADPERIOD ] ]
+    SHORTCUT_PREV_BAR [ Old [ 1 DIMOFS_Z AxisPositive ] 0x00000002 ]
+    SHORTCUT_NEXT_BAR [ Old [ 1 DIMOFS_Z AxisNegative ] 0x00000002 ]
+    SHORTCUT_PREV_BAR [ Old [ 0 DIK_MINUS ] ]
+    SHORTCUT_NEXT_BAR [ Old [ 0 DIK_EQUALS ] ]
+    SHORTCUT_LOCK_BARS [ Old [ 0 DIK_EQUALS ] 0x00000002 ]
+    MovementForward [ Old [ 0 DIK_UPARROW ] ]
+    MovementBackup [ Old [ 0 DIK_DOWNARROW ] ]
+    CHATWINDOW_NEXT [ Old [ 0 DIK_RBRACKET ] ]
+    CHATWINDOW_PREV [ Old [ 0 DIK_LBRACKET ] ]
+    MAINMENU_PANEL_KEY [ Old [ 0 DIK_BACKSLASH ] ]
+    OPTION_PANEL_KEY [ Old [ 0 DIK_O ] 0x00000002 ]
+    ToggleInventoryPanel [ Old [ 0 DIK_I ] ]
+    ToggleInventoryPanel [ Old [ 0 DIK_I ] 0x00000002 ]
+    ToggleMonsterManualUI [ Old [ 0 DIK_M ] 0x00000002 ]
+    ToggleEpicDestinyUI [ Old [ 0 DIK_E ] 0x00000002 ]
+    CHARACTER_PANEL_KEY [ Old [ 0 DIK_C ] ]
+    CHARACTER_PANEL_KEY [ Old [ 0 DIK_C ] 0x00000002 ]
+    HELP_PANEL_KEY [ Old [ 0 DIK_H ] 0x00000002 ]
+    ADVENTURECOMPENDIUM_PANEL_KEY [ Old [ 0 DIK_P ] ]
+    QUEST_JOURNAL_PANEL_KEY [ Old [ 0 DIK_L ] ]
+    SOCIAL_PANEL_KEY [ Old [ 0 DIK_O ] ]
+    SOCIAL_PANEL_KEY [ Old [ 0 DIK_G ] 0x00000002 ]
+    WEBSTORE_SHORTCUT_KEY [ Old [ 0 DIK_S ] 0x00000002 ]
+    BLACKMARKETAUCTIONHOUSE_SHORTCUT_KEY [ Old [ 0 DIK_B ] 0x00000002 ]
+    ToggleEnhancementUI [ Old [ 0 DIK_R ] 0x00000002 ]
+    EXITGAME_KEY [ Old [ 0 DIK_BACKSLASH ] 0x00000002 ]
+    VOICECHAT_TALK [ Old [ 0 DIK_F ] ]
+    EXAMINE_ITEM_KEY [ Old [ 0 DIK_Z ] ]
+    QUEST_HOTMENU_KEY [ Old [ 0 DIK_J ] ]
+    SHOW_DUNGEON_SUMMARY_KEY [ Old [ 0 DIK_X ] ]
+    SHOW_NAMES_KEY [ Old [ 0 DIK_V ] ]
+    SHOW_MONSTER_HEALTH_KEY [ Old [ 0 DIK_V ] 0x00000002 ]
+    PLAYER_LIGHT_KEY [ Old [ 0 DIK_L ] 0x00000002 ]
+    TARGET_FELLOW_1_KEY [ Old [ 0 DIK_F1 ] ]
+    TARGET_FELLOW_2_KEY [ Old [ 0 DIK_F2 ] ]
+    TARGET_FELLOW_3_KEY [ Old [ 0 DIK_F3 ] ]
+    TARGET_FELLOW_4_KEY [ Old [ 0 DIK_F4 ] ]
+    TARGET_FELLOW_5_KEY [ Old [ 0 DIK_F5 ] ]
+    TARGET_FELLOW_6_KEY [ Old [ 0 DIK_F6 ] ]
+    TARGET_FELLOW_7_KEY [ Old [ 0 DIK_F7 ] ]
+    TARGET_FELLOW_8_KEY [ Old [ 0 DIK_F8 ] ]
+    TARGET_FELLOW_9_KEY [ Old [ 0 DIK_F9 ] ]
+    TARGET_FELLOW_10_KEY [ Old [ 0 DIK_F10 ] ]
+    TARGET_FELLOW_11_KEY [ Old [ 0 DIK_F11 ] ]
+    TARGET_FELLOW_12_KEY [ Old [ 0 DIK_F12 ] ]
+    TARGET_FELLOW_PET_1_KEY [ Old [ 0 DIK_F1 ] 0x00000002 ]
+    TARGET_FELLOW_PET_2_KEY [ Old [ 0 DIK_F2 ] 0x00000002 ]
+    TARGET_FELLOW_PET_3_KEY [ Old [ 0 DIK_F3 ] 0x00000002 ]
+    TARGET_FELLOW_PET_4_KEY [ Old [ 0 DIK_F4 ] 0x00000002 ]
+    TARGET_FELLOW_PET_5_KEY [ Old [ 0 DIK_F5 ] 0x00000002 ]
+    TARGET_FELLOW_PET_6_KEY [ Old [ 0 DIK_F6 ] 0x00000002 ]
+    TARGET_FELLOW_PET_7_KEY [ Old [ 0 DIK_F7 ] 0x00000002 ]
+    TARGET_FELLOW_PET_8_KEY [ Old [ 0 DIK_F8 ] 0x00000002 ]
+    TARGET_FELLOW_PET_9_KEY [ Old [ 0 DIK_F9 ] 0x00000002 ]
+    TARGET_FELLOW_PET_10_KEY [ Old [ 0 DIK_F10 ] 0x00000002 ]
+    TARGET_FELLOW_PET_11_KEY [ Old [ 0 DIK_F11 ] 0x00000002 ]
+    TARGET_FELLOW_PET_12_KEY [ Old [ 0 DIK_F12 ] 0x00000002 ]
+    ToggleMapPanel [ Old [ 0 DIK_M ] ]
+    HIDE_UI [ Old [ 0 DIK_Z ] 0x00000004 ]
+    LOOTALL [ Old [ 0 DIK_B ] ]
+    PointerX [ Old [ 1 DIMOFS_X ] ]
+    PointerY [ Old [ 1 DIMOFS_Y ] ]
+    SelectLeft [ Old [ 1 DIMOFS_BUTTON0 ] ]
+    SelectRight [ Old [ 1 DIMOFS_BUTTON1 ] ]
+    SelectDblLeft [ Old [ 1 DIMOFS_BUTTON0 ] 0x00000000 MouseDblClick ]
+    SelectDblRight [ Old [ 1 DIMOFS_BUTTON1 ] 0x00000000 MouseDblClick ]
+    TapLeft [ Old [ 1 DIMOFS_BUTTON0 ] 0x00000000 Tap ]
+    TapRight [ Old [ 1 DIMOFS_BUTTON1 ] 0x00000000 Tap ]
+    EscapeKey [ Old [ 0 DIK_ESCAPE ] ]
+    AcceptInput [ Old [ 0 DIK_RETURN ] ]
+    AcceptInput [ Old [ 0 DIK_NUMPADENTER ] ]
+    START_COMMAND [ Old [ 0 DIK_SLASH ] ]
+    CaptureScreenshot [ Old [ 0 DIK_P ] 0x00000002 ]
+    ToggleDebugHUD [ Old [ 0 DIK_F ] 0x00000002 ]
+    ToggleBlockUI [ Old [ 0 DIK_F9 ] 0x00000007 ]
+    TogglePerfGraph [ Old [ 0 DIK_F10 ] 0x00000007 ]
+    ToggleProfiler [ Old [ 0 DIK_F11 ] 0x00000007 ]
+    ToggleEntityNodeLabels [ Old [ 0 DIK_F12 ] 0x00000007 ]
+    ToggleStringTokenDebugger [ Old [ 0 DIK_GRAVE ] 0x00000004 ]
+    CameraReset [ Old [ 0 DIK_NUMPAD0 ] ]
+    CameraInstantMoveToward [ Old [ 1 DIMOFS_Z AxisPositive ] ]
+    CameraInstantMoveAway [ Old [ 1 DIMOFS_Z AxisNegative ] ]
+    CameraRotateLeft [ Old [ 0 DIK_NUMPAD4 ] ]
+    CameraRotateRight [ Old [ 0 DIK_NUMPAD6 ] ]
+    CameraRotateUp [ Old [ 0 DIK_NUMPAD8 ] ]
+    CameraRotateDown [ Old [ 0 DIK_NUMPAD5 ] ]
+    CameraRotateDown [ Old [ 0 DIK_NUMPAD2 ] ]
+    CameraRotateRollLeft [ Old [ 0 DIK_NUMPADMINUS ] ]
+    CameraRotateRollRight [ Old [ 0 DIK_NUMPADPLUS ] ]
+    CameraRotateRollReset [ Old [ 0 DIK_NUMPADSLASH ] ]
+    CameraDecreaseFOV [ Old [ 0 DIK_NUMPAD3 ] ]
+    CameraIncreaseFOV [ Old [ 0 DIK_NUMPAD1 ] ]
+    CameraMoveToward [ Old [ 0 DIK_NUMPAD9 ] ]
+    CameraMoveAway [ Old [ 0 DIK_NUMPAD7 ] ]
+    CameraFirstPerson [ Old [ 0 DIK_NUMPADSTAR ] ]
+    CameraFlightMode [ Old [ 0 DIK_PERIOD ] 0x00000002 ]
+    AltTab [ Old [ 0 DIK_TAB ] 0x00000004 ]
+    CursorPreviousPage [ Old [ 0 DIK_PGUP ] ]
+    CursorNextPage [ Old [ 0 DIK_PGDN ] ]
+    CursorStartOfLine [ Old [ 0 DIK_HOME ] ]
+    HUD_PANEL_KEY [ Old [ 0 DIK_END ] ]
+    AlternateSelectDblRight [ Old [ 4 DIJOFS_RZ AxisPositive ] 0x00000000 MouseDblClick ]
+    AlternateTapRight [ Old [ 4 DIJOFS_RZ AxisPositive ] 0x00000000 Tap ]
+    AlternateSelectDblLeft [ Old [ 4 DIJOFS_BUTTON9 ] 0x00000000 MouseDblClick ]
+    AlternateTapLeft [ Old [ 4 DIJOFS_BUTTON9 ] 0x00000000 Tap ]
+  ]
+
+  DialogBoxes
+  [
+    FocusMoveUp [ Old [ 4 DIJOFS_POV0 POVUp ] ]
+    FocusMoveDown [ Old [ 4 DIJOFS_POV0 POVDown ] ]
+    FocusMoveLeft [ Old [ 4 DIJOFS_POV0 POVLeft ] ]
+    FocusMoveRight [ Old [ 4 DIJOFS_POV0 POVRight ] ]
+    AcceptKey [ Old [ 4 "DIJOFS_BUTTON(0)" ] ]
+    EscapeKey [ Old [ 4 DIJOFS_BUTTON1 ] ]
+    POPUPMENU_1_KEY [ Old [ 0 DIK_F1 ] 0x00000002 ]
+    POPUPMENU_2_KEY [ Old [ 0 DIK_F2 ] 0x00000002 ]
+    POPUPMENU_3_KEY [ Old [ 0 DIK_F3 ] 0x00000002 ]
+    POPUPMENU_4_KEY [ Old [ 0 DIK_F4 ] 0x00000002 ]
+    POPUPMENU_5_KEY [ Old [ 0 DIK_F5 ] 0x00000002 ]
+    POPUPMENU_6_KEY [ Old [ 0 DIK_F6 ] 0x00000002 ]
+    POPUPMENU_7_KEY [ Old [ 0 DIK_F7 ] 0x00000002 ]
+    POPUPMENU_8_KEY [ Old [ 0 DIK_F8 ] 0x00000002 ]
+    POPUPMENU_9_KEY [ Old [ 0 DIK_F9 ] 0x00000002 ]
+    POPUPMENU_10_KEY [ Old [ 0 DIK_F10 ] 0x00000002 ]
+    POPUPMENU_11_KEY [ Old [ 0 DIK_F11 ] 0x00000002 ]
+    POPUPMENU_12_KEY [ Old [ 0 DIK_F12 ] 0x00000002 ]
+    DIALOGBOX_OK_KEY [ Old [ 0 DIK_O ] ]
+    DIALOGBOX_YES_KEY [ Old [ 0 DIK_Y ] ]
+    DIALOGBOX_NO_KEY [ Old [ 0 DIK_N ] ]
+    FocusMoveLeft [ Old [ 0 DIK_LEFTARROW ] ]
+    FocusMoveRight [ Old [ 0 DIK_RIGHTARROW ] ]
+    FocusMoveUp [ Old [ 0 DIK_UPARROW ] ]
+    FocusMoveDown [ Old [ 0 DIK_DOWNARROW ] ]
+    FocusNext [ Old [ 0 DIK_TAB ] ]
+    FocusPrevious [ Old [ 0 DIK_TAB ] 0x00000001 ]
+    EscapeKey [ Old [ 0 DIK_ESCAPE ] ]
+  ]
+
+  CombatControls
+  [
+    ClassicInteractSteer [ Old [ 1 DIMOFS_BUTTON1 ] ]
+    AttackInteract [ Old [ 1 DIMOFS_BUTTON0 ] ]
+    ClassicInteractDblClick [ Old [ 1 DIMOFS_BUTTON1 ] 0x00000000 MouseDblClick ]
+    ClassicInteractTap [ Old [ 1 DIMOFS_BUTTON1 ] 0x00000000 Tap ]
+    AttackInteract [ Old [ 1 DIMOFS_BUTTON0 ] 0x00000000 MouseDblClick ]
+    Invalid [ Old [ 1 DIMOFS_BUTTON0 ] 0x00000000 Tap ]
+  ]
+
+  EditControls
+  [
+    ScrollUp [ Old [ 1 DIMOFS_Z AxisPositive ] ]
+    ScrollDown [ Old [ 1 DIMOFS_Z AxisNegative ] ]
+    ScrollUp [ Old [ 0 DIK_UPARROW ] 0x00000002 ]
+    ScrollDown [ Old [ 0 DIK_DOWNARROW ] 0x00000002 ]
+    CursorCharLeft [ Old [ 0 DIK_LEFTARROW ] ]
+    CursorCharRight [ Old [ 0 DIK_RIGHTARROW ] ]
+    CursorPreviousLine [ Old [ 0 DIK_UPARROW ] ]
+    CursorNextLine [ Old [ 0 DIK_DOWNARROW ] ]
+    CursorPreviousPage [ Old [ 0 DIK_PGUP ] ]
+    CursorNextPage [ Old [ 0 DIK_PGDN ] ]
+    CursorWordLeft [ Old [ 0 DIK_LEFTARROW ] 0x00000002 ]
+    CursorWordRight [ Old [ 0 DIK_RIGHTARROW ] 0x00000002 ]
+    CursorStartOfLine [ Old [ 0 DIK_HOME ] ]
+    CursorStartOfDocument [ Old [ 0 DIK_HOME ] 0x00000002 ]
+    CursorEndOfLine [ Old [ 0 DIK_END ] ]
+    CursorEndOfDocument [ Old [ 0 DIK_END ] 0x00000002 ]
+    AcceptInput [ Old [ 0 DIK_RETURN ] ]
+    AcceptInput [ Old [ 0 DIK_NUMPADENTER ] ]
+    EscapeText [ Old [ 0 DIK_ESCAPE ] ]
+    DeleteKey [ Old [ 0 DIK_DELETE ] ]
+    BackspaceKey [ Old [ 0 DIK_BACK ] ]
+  ]
+
+  ScrollableControls
+
+  ScrollableControls_Mouse
+  [
+    ScrollUp [ Old [ 1 DIMOFS_Z AxisPositive ] ]
+    ScrollDown [ Old [ 1 DIMOFS_Z AxisNegative ] ]
+    ScrollUpCtrl [ Old [ 1 DIMOFS_Z AxisPositive ] 0x00000002 ]
+    ScrollDownCtrl [ Old [ 1 DIMOFS_Z AxisNegative ] 0x00000002 ]
+  ]
+
+  CopyAndPasteControls
+  [
+    CopyText [ Old [ 0 DIK_C ] 0x00000002 ]
+    CutText [ Old [ 0 DIK_X ] 0x00000002 ]
+    PasteText [ Old [ 0 DIK_V ] 0x00000002 ]
+    CopyText [ Old [ 0 DIK_C ] 0x00000008 ]
+    CutText [ Old [ 0 DIK_X ] 0x00000008 ]
+    PasteText [ Old [ 0 DIK_V ] 0x00000008 ]
+  ]
+
+  DebugConsole
+  [
+    ToggleDebugConsole [ Old [ 0 DIK_GRAVE ] 0x00000002 ]
+    ToggleDebugConsole [ Old [ 0 DIK_PAUSE ] ]
+  ]
+
+  StringTokenDebugger
+  [
+    ToggleStringTokenDebugger [ Old [ 0 DIK_GRAVE ] 0x00000004 ]
+  ]
+]

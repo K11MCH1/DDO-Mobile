@@ -138,9 +138,12 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
     override fun pointer(x: Float, y: Float) =
         Compositor.nativePointerMotion(x * outWidth / controls.width.coerceAtLeast(1), y * outHeight / controls.height.coerceAtLeast(1))
 
+    override fun relative(dx: Float, dy: Float) =
+        Compositor.nativePointerRelative(dx * outWidth / controls.width.coerceAtLeast(1), dy * outHeight / controls.height.coerceAtLeast(1))
+
     override fun button(code: Int, pressed: Boolean) = Compositor.nativePointerButton(code, pressed)
     override fun key(code: Int, pressed: Boolean) = Compositor.nativeKey(code, pressed)
-    override fun scroll(steps: Float) = Compositor.nativePointerAxis(steps * 10f, 0f)
+    override fun scroll(steps: Float) = Compositor.nativePointerAxis(steps, 0f)
 
     override fun keyboard() {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -219,7 +222,7 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
         if (event.isFromSource(InputDevice.SOURCE_MOUSE)) {
             when (event.actionMasked) {
                 MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_MOVE -> pointer(event.x, event.y)
-                MotionEvent.ACTION_SCROLL -> scroll(-event.getAxisValue(MotionEvent.AXIS_VSCROLL))
+                MotionEvent.ACTION_SCROLL -> scroll(event.getAxisValue(MotionEvent.AXIS_VSCROLL))
                 MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.ACTION_BUTTON_RELEASE -> {
                     val pressed = event.actionMasked == MotionEvent.ACTION_BUTTON_PRESS
                     when (event.actionButton) {
