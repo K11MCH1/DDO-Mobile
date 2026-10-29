@@ -11,7 +11,15 @@ line, and the file is removed as soon as it is read.
 """
 import json
 import os
+import re
+import shutil
 import sys
+
+FEX_BUILD = "/usr/local/lib/ddo-mobile/libarm64ecfex.dll"
+# FEX stamps its version in more than one form, e.g. FEX-2610-30-g741e146 and FEX-2610e146.
+FEX_VERSION = re.compile(rb"FEX-\d{4}[0-9A-Za-z-]*")
+# Exported only by FEX with DroidDeck-Proton's patch series, which runtime/fex builds on.
+DROIDDECK_FEX = b"BTCpu64NotifyNonImageViews"
 
 
 def say(message):
@@ -93,6 +101,43 @@ def big_cores():
     return chosen
 
 
+def use_runtime_fex(proton_dir):
+    """Puts the runtime's FEX (runtime/fex) in place of the Proton's own. That build is DroidDeck-Proton's FEX plus
+    fixes for running under Wine, so it only goes into a Proton whose FEX is the same version with the same series;
+    the Proton's file is kept beside it as .orig."""
+    theirs = os.path.join(proton_dir, "files", "lib", "wine", "aarch64-windows", "libarm64ecfex.dll")
+    original = theirs + ".orig"
+    if not os.path.isfile(FEX_BUILD) or not os.path.isfile(theirs):
+        return
+    with open(FEX_BUILD, "rb") as f:
+        ours = f.read()
+    with open(original if os.path.isfile(original) else theirs, "rb") as f:
+        stock = f.read()
+
+    def identity(data):
+        return tuple(sorted(set(FEX_VERSION.findall(data)))), DROIDDECK_FEX in data
+
+    def version(data):
+        return max(identity(data)[0], key=len, default=b"no FEX version").decode()
+
+    if not identity(ours)[0] or identity(stock) != identity(ours):
+        why = ("it is %s, DDO Mobile's is %s" % (version(stock), version(ours)) if identity(stock)[0] != identity(ours)[0]
+               else "it is not DroidDeck-Proton's FEX")
+        say("keeping %s's own FEX: %s" % (os.path.basename(proton_dir), why))
+        return
+    with open(theirs, "rb") as f:
+        if f.read() == ours:
+            return
+    if not os.path.isfile(original):
+        shutil.copy2(theirs, original)
+    staged = theirs + ".ddo-new"
+    with open(staged, "wb") as f:
+        f.write(ours)
+    os.chmod(staged, 0o555)
+    os.replace(staged, theirs)
+    say("using DDO Mobile's build of %s" % version(ours))
+
+
 def main(argv):
     if len(argv) != 2 or argv[0] != "--args-file":
         say("usage: ddo-run --args-file PATH")
@@ -113,8 +158,12 @@ def main(argv):
     if not os.path.isfile(exe) or not os.path.isdir(folder) or not prefix:
         say("the game is not where the launcher expected it (%s)" % exe)
         return 2
+    try:
+        use_runtime_fex(os.path.dirname(proton))
+    except OSError as e:
+        say("could not put DDO Mobile's FEX in place: %s" % e)
     os.makedirs(prefix, exist_ok=True)
-    steam = os.path.join(os.environ.get("HOME", "/root"), ".local", "share", "Steam")
+    steam =os.path.join(os.environ.get("HOME", "/root"), ".local", "share", "Steam")
     os.makedirs(steam, exist_ok=True)
     env = dict(os.environ)
     env.update({

@@ -1,0 +1,130 @@
+diff --git a/CodeEmitter/CodeEmitter/Buffer.h b/CodeEmitter/CodeEmitter/Buffer.h
+index 602eeb674..752ed3f60 100644
+--- a/CodeEmitter/CodeEmitter/Buffer.h
++++ b/CodeEmitter/CodeEmitter/Buffer.h
+@@ -63,7 +63,35 @@ public:
+   }
+ 
+   static void ClearICache(void* Begin, std::size_t Length) {
++#ifdef _WIN32
++    // On Windows targets __builtin___clear_cache becomes FlushInstructionCache: under Wine a system call, plus a
++    // callback into FEX's own code invalidation, for every compiled or linked block. Wine always runs us on Linux,
++    // which lets user space maintain the caches itself, as compiler-rt does there.
++    static const uint64_t CTR = [] {
++      uint64_t Value;
++      __asm__ volatile("mrs %0, ctr_el0" : "=r"(Value));
++      return Value;
++    }();
++    const uintptr_t Start = reinterpret_cast<uintptr_t>(Begin);
++    const uintptr_t End = Start + Length;
++    if (!(CTR & (1ULL << 28))) { // IDC clear: clean the data cache to the point of unification
++      const uintptr_t Line = 4ULL << ((CTR >> 16) & 0xf);
++      for (uintptr_t Addr = Start & ~(Line - 1); Addr < End; Addr += Line) {
++        __asm__ volatile("dc cvau, %0" ::"r"(Addr) : "memory");
++      }
++    }
++    __asm__ volatile("dsb ish" ::: "memory");
++    if (!(CTR & (1ULL << 29))) { // DIC clear: invalidate the instruction cache
++      const uintptr_t Line = 4ULL << (CTR & 0xf);
++      for (uintptr_t Addr = Start & ~(Line - 1); Addr < End; Addr += Line) {
++        __asm__ volatile("ic ivau, %0" ::"r"(Addr) : "memory");
++      }
++      __asm__ volatile("dsb ish" ::: "memory");
++    }
++    __asm__ volatile("isb" ::: "memory");
++#else
+     __builtin___clear_cache(static_cast<char*>(Begin), static_cast<char*>(Begin) + Length);
++#endif
+   }
+ 
+   size_t GetCursorOffset() const {
+diff --git a/FEXCore/Source/Utils/ArchHelpers/Arm64.cpp b/FEXCore/Source/Utils/ArchHelpers/Arm64.cpp
+index 01e5bb22e..4e174a0c1 100644
+--- a/FEXCore/Source/Utils/ArchHelpers/Arm64.cpp
++++ b/FEXCore/Source/Utils/ArchHelpers/Arm64.cpp
+@@ -9,6 +9,7 @@
+ #include <FEXCore/Utils/LogManager.h>
+ #include <FEXCore/Utils/Telemetry.h>
+ #include <FEXCore/Utils/ArchHelpers/Arm64.h>
++#include <CodeEmitter/Buffer.h>
+ 
+ #include <atomic>
+ #include <cstdint>
+@@ -120,7 +121,7 @@ static constexpr uint32_t GetRmReg(uint32_t Instr) {
+ }
+ 
+ static void ClearICache(void* Begin, std::size_t Length) {
+-  __builtin___clear_cache(static_cast<char*>(Begin), static_cast<char*>(Begin) + Length);
++  ARMEmitter::Buffer::ClearICache(Begin, Length);
+ }
+ 
+ static __uint128_t LoadAcquire128(uint64_t Addr) {
+diff --git a/FEXCore/include/FEXCore/Utils/AllocatorHooks.h b/FEXCore/include/FEXCore/Utils/AllocatorHooks.h
+index c4cadf40a..feaf848b9 100644
+--- a/FEXCore/include/FEXCore/Utils/AllocatorHooks.h
++++ b/FEXCore/include/FEXCore/Utils/AllocatorHooks.h
+@@ -71,13 +71,10 @@ inline void VirtualFree(void* Ptr, size_t Size) {
+ }
+ 
+ inline void VirtualDontNeed(void* Ptr, size_t Size, bool Recommit = true) {
+-  // Zero the page-aligned region, preserving permissions.
+-  MEMORY_BASIC_INFORMATION Info;
+-  ::VirtualQuery(Ptr, &Info, sizeof(Info));
+-  ::VirtualFree(Ptr, Size, MEM_DECOMMIT);
+-  if (Recommit) {
+-    ::VirtualAlloc(Ptr, Size, MEM_COMMIT, Info.Protect);
+-  }
++  // Zero the page-aligned region, preserving permissions. Wine implements MEM_RESET as madvise(MADV_DONTNEED), so
++  // these private pages read back as zeros and their memory goes back to the system: what a decommit and recommit
++  // achieve, in one call instead of three that each take Wine's global virtual memory lock.
++  ::VirtualAlloc(Ptr, Size, MEM_RESET, PAGE_NOACCESS);
+ }
+ 
+ inline bool VirtualProtect(void* Ptr, size_t Size, ProtectOptions options) {
+diff --git a/Source/Windows/Common/InvalidationTracker.cpp b/Source/Windows/Common/InvalidationTracker.cpp
+index b9cfb25ff..d707b9d7f 100644
+--- a/Source/Windows/Common/InvalidationTracker.cpp
++++ b/Source/Windows/Common/InvalidationTracker.cpp
+@@ -288,11 +288,6 @@ static FEXCore::HLE::ExecutableRangeInfo ClampToAccessible(FEXCore::HLE::Executa
+ }
+ 
+ FEXCore::HLE::ExecutableRangeInfo InvalidationTracker::QueryExecutableRange(uint64_t Address) {
+-  MEMORY_BASIC_INFORMATION Info;
+-  if (!VirtualQuery(reinterpret_cast<LPCVOID>(Address), &Info, sizeof(Info))) {
+-    return {};
+-  }
+-
+   // Assumes IntervalsLock is held.
+   const auto BuildResult = [this](uint64_t Address) -> FEXCore::HLE::ExecutableRangeInfo {
+     const auto XResult = XIntervals.Query(Address);
+@@ -308,12 +303,26 @@ FEXCore::HLE::ExecutableRangeInfo InvalidationTracker::QueryExecutableRange(uint
+     return {XResult.Interval.Offset, XResult.Interval.End - XResult.Interval.Offset, false};
+   };
+ 
++  FEXCore::HLE::ExecutableRangeInfo Tracked;
+   {
+     std::shared_lock Lock(IntervalsLock);
+-    const auto Result = BuildResult(Address);
+-    if (Result.Size) {
+-      return ClampToAccessible(Result, Address, Info);
+-    }
++    Tracked = BuildResult(Address);
++  }
++
++  // This runs for every block compiled and every disk cache lookup, and under Wine a VirtualQuery takes its global
++  // virtual memory lock. Only writable executable regions - where protectors unpack code and flip protections behind
++  // FEX's back - can hide inaccessible pages from the intervals, so read-only executable ranges such as image code
++  // are answered from the intervals alone.
++  if (Tracked.Size && !Tracked.Writable) {
++    return Tracked;
++  }
++
++  MEMORY_BASIC_INFORMATION Info;
++  if (!VirtualQuery(reinterpret_cast<LPCVOID>(Address), &Info, sizeof(Info))) {
++    return {};
++  }
++  if (Tracked.Size) {
++    return ClampToAccessible(Tracked, Address, Info);
+   }
+ 
+   // The interval lists are only ever populated from allocation/protection notifications and from PE image

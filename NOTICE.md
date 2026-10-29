@@ -39,6 +39,14 @@ Taken from DroidDeck's `app/src/main/cpp/waylandcomp/` and modified (reduced to 
 The session design (proot binds, the KGSL render-node stand-in, the Proton launch environment) follows DroidDeck's
 `LinuxRuntime.java`, `droiddeck-session` and `droiddeck-proton-run`.
 
+## FEX (MIT) — https://github.com/FEX-Emu/FEX
+
+`runtime/fex/build.sh` builds FEX's ARM64EC translator (`libarm64ecfex.dll`) from upstream FEX at
+`FEX-2610-30-g741e146` with DroidDeck-Proton's FEX patch series (`patches/fex` at `DroidDeck-Proton-11-11.9`, applied
+unmodified) and `runtime/fex/patches/` on top; rpmalloc (public domain / MIT) is FEX's allocator submodule. FEX does
+not accept AI-generated contributions, so those patches are for DDO Mobile only and must not be sent upstream as they
+are.
+
 ## OneLauncher (GPL-3.0) — https://github.com/JuneStepp/OneLauncher
 
 The GLS sign-in, world status, login-queue and client-argument flow in `ddo/DdoGls.kt` follows OneLauncher's

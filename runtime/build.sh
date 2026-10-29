@@ -70,6 +70,12 @@ ls -la "$lib"/libddo*.so
 step "overlay"
 cp -a "$here/overlay/." "$root/"
 chmod 755 "$root"/usr/local/bin/*
+# Built on a PC by fex/build.sh; ddo-run swaps it into a matching Proton.
+if [ -f "$here/fex/out/libarm64ecfex.dll" ]; then
+  install -D -m 644 "$here/fex/out/libarm64ecfex.dll" "$root/usr/local/lib/ddo-mobile/libarm64ecfex.dll"
+else
+  echo "note: no fex/out/libarm64ecfex.dll (run fex/build.sh first); the runtime will use each Proton's own FEX"
+fi
 printf '%s\n' "$version" > "$root/etc/ddo-runtime-version"
 printf '%s\n' "${pkgs[@]}" > "$root/etc/ddo-runtime-packages"
 
