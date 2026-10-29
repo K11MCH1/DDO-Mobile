@@ -122,7 +122,14 @@ object DdoLaunch {
         ini["Render", "D3DVersionPromptedForAtStartup"] = "11"
         ini["Render", "HavePromptedForD3D10AtStartup"] = "True"
         ini["Troubleshooting", "MaximumFrameRate"] = DdoSettings.frameLimit(context).toString()
+        // EngineSpeed picks how long the client sleeps every frame to spare the CPU: VeryLow 40 ms, Low 30, Medium 20,
+        // High 10, VeryHigh none. Under translation a frame already costs over 20 ms, so High's 10 ms nap alone cut
+        // the in-world frame rate by about a third; MaximumFrameRate still caps it.
+        ini["Troubleshooting", "EngineSpeed"] = "VeryHigh"
         ini["Display", "ShowIntroMovie"] = "False"
+        // gamescope shows whole frames only, so the game's own vsync never prevents tearing; on a 60 Hz panel it
+        // just drops a frame that misses one refresh straight to 30 fps.
+        ini["Display", "SyncToRefresh"] = "False"
         val quality = DdoSettings.quality(context)
         if (ini["Launcher", "DdoMobileQuality"] != quality.name) {
             QUALITY.getValue(quality).forEach { (k, v) -> ini["Render", k] = v }

@@ -11,8 +11,10 @@ while [ "$(date +%s)" -lt "$end" ]; do
     name=$(cat /proc/$p/comm 2>/dev/null)
     for t in /proc/$p/task/*; do
       read -r st < "$t/stat" 2>/dev/null || continue
+      # The shell's own read: an external tr on the comm of an exiting thread once spun at 100% for half an hour.
+      read -r comm < "$t/comm" 2>/dev/null || continue
       set -- ${st##*) }
-      echo "P $p $name $(basename $t) $(tr ' ' _ < $t/comm) ${12} ${13} ${37}" >> "$out"
+      echo "P $p $name ${t##*/} ${comm%% *} ${12} ${13} ${37}" >> "$out"
     done
     case "$name" in *dndclient*) echo "IO $(grep -E '^(rchar|read_bytes|syscr)' /proc/$p/io | awk '{printf "%s ", $2}')" >> "$out";; esac
   done
