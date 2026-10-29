@@ -9,10 +9,12 @@ PATH is a JSON request the app writes just before the session starts:
 The client's arguments carry the account's login ticket, so they travel in this file rather than on a command
 line, and the file is removed as soon as it is read.
 """
+import hashlib
 import json
 import os
 import re
 import shutil
+import stat
 import sys
 
 FEX_BUILD = "/usr/local/lib/ddo-mobile/libarm64ecfex.dll"
@@ -20,6 +22,20 @@ FEX_BUILD = "/usr/local/lib/ddo-mobile/libarm64ecfex.dll"
 FEX_VERSION = re.compile(rb"FEX-\d{4}[0-9A-Za-z-]*")
 # Exported only by FEX with DroidDeck-Proton's patch series, which runtime/fex builds on.
 DROIDDECK_FEX = b"BTCpu64NotifyNonImageViews"
+
+# ntdll.dll builds by SHA-256 -> (file offset, original bytes, new bytes) for patch_ntdll_timer.
+NTDLL_TIMER = {
+    # DroidDeck-Proton 11-11.9
+    "18e970a8d2fdde2496d197b52eb80e87626e169a00b986dbe2c3d918839cfaf6": [
+        # #RtlQueryPerformanceCounter: mrs x8, cntvct_el0; str x8, [x0]; mov w0, #1; ret
+        (0xdf350, "fd7bbfa9fd030091e1031faaed470094", "48e03bd5080000f920008052c0035fd6"),
+        # #RtlQueryPerformanceFrequency: mrs x8, cntfrq_el0; str x8, [x0]; mov w0, #1; ret
+        (0xdf370, "08d092520813a072080000f920008052", "08e03bd5080000f920008052c0035fd6"),
+        # #NtQueryPerformanceCounter$hp_target (the system call stub): both from the timer, STATUS_SUCCESS
+        (0xccbe0, "280680d2e9031eaa50ba41f9700000b4100640f9700000b5d0040090",
+         "48e03bd5080000f9610000b408e03bd5280000f9e0031f2ac0035fd6"),
+    ],
+}
 
 
 def say(message):
@@ -125,17 +141,51 @@ def use_runtime_fex(proton_dir):
                else "it is not DroidDeck-Proton's FEX")
         say("keeping %s's own FEX: %s" % (os.path.basename(proton_dir), why))
         return
-    with open(theirs, "rb") as f:
-        if f.read() == ours:
+    if put_in_place(theirs, ours):
+        say("using DDO Mobile's build of %s" % version(ours))
+
+
+def patch_ntdll_timer(proton_dir):
+    """Windows on ARM answers QueryPerformanceCounter from the CPU's generic timer without leaving user space; Wine's
+    ARM64EC ntdll makes a system call for each one, and DDO makes hundreds of thousands a second while it loads. The
+    Windows side's counter, frequency and NtQueryPerformanceCounter stub are pointed at the timer instead. Wine's
+    Linux side keeps its own 100 ns counter, which its timeouts are built on, and its Windows-side users all take the
+    frequency along with the counter."""
+    path = os.path.join(proton_dir, "files", "lib", "wine", "aarch64-windows", "ntdll.dll")
+    if not os.path.isfile(path):
+        return
+    original = path + ".orig"
+    with open(original if os.path.isfile(original) else path, "rb") as f:
+        stock = f.read()
+    patches = NTDLL_TIMER.get(hashlib.sha256(stock).hexdigest())
+    if patches is None:
+        say("keeping %s's own QueryPerformanceCounter: not an ntdll.dll DDO Mobile knows" % os.path.basename(proton_dir))
+        return
+    patched = bytearray(stock)
+    for offset, old, new in patches:
+        old, new = bytes.fromhex(old), bytes.fromhex(new)
+        if stock[offset:offset + len(old)] != old:
+            say("keeping %s's own QueryPerformanceCounter: ntdll.dll differs at %#x" % (os.path.basename(proton_dir), offset))
             return
+        patched[offset:offset + len(new)] = new
+    if put_in_place(path, bytes(patched)):
+        say("QueryPerformanceCounter reads the CPU timer")
+
+
+def put_in_place(path, data):
+    """Replaces a file of the Proton with data, keeping the Proton's own beside it as .orig. False when already done."""
+    with open(path, "rb") as f:
+        if f.read() == data:
+            return False
+    original = path + ".orig"
     if not os.path.isfile(original):
-        shutil.copy2(theirs, original)
-    staged = theirs + ".ddo-new"
+        shutil.copy2(path, original)
+    staged = path + ".ddo-new"
     with open(staged, "wb") as f:
-        f.write(ours)
-    os.chmod(staged, 0o555)
-    os.replace(staged, theirs)
-    say("using DDO Mobile's build of %s" % version(ours))
+        f.write(data)
+    os.chmod(staged, stat.S_IMODE(os.stat(original).st_mode))
+    os.replace(staged, path)
+    return True
 
 
 def main(argv):
@@ -158,12 +208,13 @@ def main(argv):
     if not os.path.isfile(exe) or not os.path.isdir(folder) or not prefix:
         say("the game is not where the launcher expected it (%s)" % exe)
         return 2
-    try:
-        use_runtime_fex(os.path.dirname(proton))
-    except OSError as e:
-        say("could not put DDO Mobile's FEX in place: %s" % e)
+    for tune in (use_runtime_fex, patch_ntdll_timer):
+        try:
+            tune(os.path.dirname(proton))
+        except OSError as e:
+            say("could not update the Proton (%s): %s" % (tune.__name__, e))
     os.makedirs(prefix, exist_ok=True)
-    steam =os.path.join(os.environ.get("HOME", "/root"), ".local", "share", "Steam")
+    steam = os.path.join(os.environ.get("HOME", "/root"), ".local", "share", "Steam")
     os.makedirs(steam, exist_ok=True)
     env = dict(os.environ)
     env.update({
