@@ -16,7 +16,7 @@ adb push "$(native "$out/src.tar")" /data/local/tmp/ddo-runtime-src.tar >/dev/nu
 adb shell chmod 644 /data/local/tmp/ddo-runtime-src.tar
 cat > "$out/run.sh" <<SCRIPT
 set -euo pipefail
-rm -rf /root/ddo-build/src /root/ddo-build/out/rootfs
+rm -rf /root/ddo-build/src /root/ddo-build/out/rootfs /root/ddo-build/out/tools /root/ddo-build/out/db
 mkdir -p /root/ddo-build/src /root/ddo-build/out
 tar -C /root/ddo-build/src -xf /tmp/ddo-runtime-src.tar
 bash /root/ddo-build/src/build.sh /root/ddo-build/out "$version"

@@ -5,7 +5,7 @@
 #ifndef __user
 #define __user
 #endif
-#include "../../app/src/main/cpp/adrenotools/src/hook/kgsl.h"
+#include "kgsl.h"
 
 typedef int (*quest_ioctl_fn)(int, unsigned long, void *);
 __attribute__((visibility("hidden")))
