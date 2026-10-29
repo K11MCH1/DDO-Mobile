@@ -23,9 +23,16 @@ if [ ! -s "$gpgdir/pubring.gpg" ] && [ ! -s "$gpgdir/pubring.kbx" ]; then
   pacman-key --config "$conf" --gpgdir "$gpgdir" --init
   pacman-key --config "$conf" --gpgdir "$gpgdir" --populate archlinuxarm
 fi
+# A lingering gpg-agent keeps proot (and so the whole build) from exiting.
+gpgconf --homedir "$gpgdir" --kill gpg-agent 2>/dev/null || true
 
 step "build tools"
-command -v gcc >/dev/null || pacman --config "$conf" -Sy --noconfirm --needed gcc
+# The compiler gets a root of its own: the build host's /usr may not be writable, and nothing of it ships.
+tools=$out/tools
+mkdir -p "$tools/var/lib/pacman"
+pacman --config "$conf" --root "$tools" --cachedir "$out/cache" -Sy --noconfirm --needed gcc binutils glibc linux-api-headers \
+  >/dev/null || pacman --config "$conf" --root "$tools" -Q gcc binutils >/dev/null
+cc() { PATH="$tools/usr/bin:$PATH" gcc --sysroot="$tools" -B"$tools/usr/bin" "$@"; }
 step "packages"
 mapfile -t pkgs < <(grep -vE '^\s*(#|$)' "$here/packages.txt")
 pacman --config "$conf" --root "$root" --cachedir "$out/cache" -Sy --noconfirm --needed "${pkgs[@]}" || {
@@ -37,12 +44,12 @@ pacman --config "$conf" --root "$root" --cachedir "$out/cache" -Sy --noconfirm -
 step "shims"
 lib=$root/usr/local/lib
 mkdir -p "$lib"
-gcc -shared -fPIC -O2 -Wall -pthread -o "$lib/libddoshim.so" "$here"/shims/preload/*.c -ldl
-gcc -shared -fPIC -O2 -Wall -pthread -o "$lib/libddofastpath.so" "$here/shims/fastpath/fastpath.c" -ldl
-gcc -shared -fPIC -O2 -Wall -nostdlib -ffreestanding -fno-stack-protector -fno-tree-loop-distribute-patterns \
+cc -shared -fPIC -O2 -Wall -pthread -o "$lib/libddoshim.so" "$here"/shims/preload/*.c -ldl
+cc -shared -fPIC -O2 -Wall -pthread -o "$lib/libddofastpath.so" "$here/shims/fastpath/fastpath.c" -ldl
+cc -shared -fPIC -O2 -Wall -nostdlib -ffreestanding -fno-stack-protector -fno-tree-loop-distribute-patterns \
   -Wl,-z,defs -o "$lib/libddoaudit.so" "$here/shims/fastpath/audit.c"
-gcc -shared -fPIC -O2 -Wall -pthread -o "$lib/libddossbs.so" "$here/shims/ssbs/ssbs_adapter.c" -ldl
-strip --strip-unneeded "$lib"/libddo*.so
+cc -shared -fPIC -O2 -Wall -pthread -o "$lib/libddossbs.so" "$here/shims/ssbs/ssbs_adapter.c" -ldl
+"$tools/usr/bin/strip" --strip-unneeded "$lib"/libddo*.so
 
 step "overlay"
 cp -a "$here/overlay/." "$root/"

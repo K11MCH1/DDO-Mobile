@@ -13,4 +13,4 @@ export MSYS_NO_PATHCONV=1
 native() { if command -v cygpath >/dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 adb push "$(native "$script")" "/data/local/tmp/$name" >/dev/null
 adb shell "chmod 644 /data/local/tmp/$name"
-adb shell "run-as $pkg sh -c 'cd files && mkdir -p ptmp $rootfs/tmp && cp /data/local/tmp/$name $rootfs/tmp/$name && P=\$(ls -d \$PWD/addons/proot/*/) && PROOT_LOADER=\${P}libproot-loader.so PROOT_TMP_DIR=\$PWD/ptmp \${P}libproot.so -0 -r \$PWD/$rootfs -b /dev -b /proc -b /sys -b \$PWD:/host -w /root /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/bin HOME=/root LANG=C.UTF-8 TERM=dumb /bin/bash /tmp/$name'"
+adb shell "run-as $pkg sh -c 'cd files && mkdir -p ptmp $rootfs/tmp && cp /data/local/tmp/$name $rootfs/tmp/$name && P=\$(ls -d \$PWD/addons/proot/*/) && PROOT_LOADER=\${P}libproot-loader.so PROOT_TMP_DIR=\$PWD/ptmp \${P}libproot.so --kill-on-exit -0 -r \$PWD/$rootfs -b /dev -b /proc -b /sys -b \$PWD:/host -w /root /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/bin HOME=/root LANG=C.UTF-8 TERM=dumb /bin/bash /tmp/$name'"

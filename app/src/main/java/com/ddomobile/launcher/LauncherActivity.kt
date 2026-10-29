@@ -58,6 +58,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ddomobile.launcher.core.ChildProcessLimit
 import com.ddomobile.launcher.ddo.DdoGls
 import com.ddomobile.launcher.ddo.DdoLaunch
 import com.ddomobile.launcher.ddo.DdoQuality
@@ -86,6 +87,7 @@ class LauncherActivity : ComponentActivity() {
     private var runtimeArchive by mutableStateOf<File?>(null)
     private var protonName by mutableStateOf<String?>(null)
     private var driverName by mutableStateOf<String?>(null)
+    private var childLimit by mutableStateOf(false)
 
     private var busy by mutableStateOf<String?>(null)
     private var busyProgress by mutableStateOf(-1f)
@@ -141,6 +143,7 @@ class LauncherActivity : ComponentActivity() {
         runtimeVersion = runtime.installedVersion()
         runtimeArchive = if (storageAllowed) runtime.localArchive() else null
         protonName = protons.selected()
+        childLimit = ChildProcessLimit.blocks(this)
         driverName = drivers.selectedLinux()?.let { id -> drivers.installed().firstOrNull { it.id == id }?.name ?: id }
     }
 
@@ -234,7 +237,7 @@ class LauncherActivity : ComponentActivity() {
         runCatching { DdoLaunch.prepareTest(this) }.onSuccess(::launch).onFailure { playError = it.message ?: it.javaClass.simpleName }
     }
 
-    private val ready get() = installProblem == null && runtimeVersion != null && protonName != null && busy == null
+    private val ready get() = installProblem == null && runtimeVersion != null && protonName != null && busy == null && !childLimit
 
     @Composable
     private fun Screen() {
@@ -354,6 +357,10 @@ class LauncherActivity : ComponentActivity() {
             Check("Turnip driver", driverName != null,
                 driverName ?: if (runtimeVersion == null) "Install the runtime first" else "DD-Turnip, about 30 MB",
                 if (runtimeVersion != null) (if (driverName == null) "Install" else "Update") else null, ::downloadDriver)
+            Check("Child process limit", !childLimit, if (childLimit) ChildProcessLimit.INSTRUCTIONS else "Off",
+                if (childLimit) "Settings" else null) {
+                runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) }
+            }
             if (runtimeVersion != null) {
                 TextButton({ pickDriver.launch(arrayOf("application/zip", "application/octet-stream")) }, enabled = busy == null) {
                     Text("Import a Turnip zip (DD-Turnip, adrenotools or Linux)")

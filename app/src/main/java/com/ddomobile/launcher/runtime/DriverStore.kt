@@ -37,8 +37,12 @@ class DriverStore(context: Context) {
     fun selectedLinux(): String? = prefs.getString("linux", null)?.takeIf { File(paths.linuxDrivers, "$it/icd.json").isFile }
         ?: installed().lastOrNull { it.linux }?.id
 
-    /** The Android driver for the compositor, or null for the phone's system Vulkan driver. */
+    /**
+     * The Android driver for the compositor, or null for the phone's system Vulkan driver. Qualcomm's driver can't
+     * import gamescope's dma-buf frames, so an installed Turnip is preferred unless the user picked otherwise.
+     */
     fun selectedAndroid(): String? = prefs.getString("android", null)?.takeIf { File(paths.androidDrivers, "$it/meta.json").isFile }
+        ?: installed().lastOrNull { it.android }?.id
 
     fun selectLinux(id: String?) = prefs.edit().putString("linux", id).apply()
     fun selectAndroid(id: String?) = prefs.edit().putString("android", id).apply()
