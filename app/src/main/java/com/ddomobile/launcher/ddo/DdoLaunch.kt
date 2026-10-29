@@ -83,6 +83,12 @@ object DdoLaunch {
         // Proton starts xalia (controller accessibility for Steam Deck) by default; DDO has no use for it.
         val env = JSONObject().put("PROTON_USE_XALIA", "0")
         if (DdoSettings.showHud(context)) env.put("DXVK_HUD", "fps,frametimes,gpuload")
+        // FEX in Proton reads FEX_* settings from the environment; Proton's own config turns profiling stats on.
+        env.put("FEX_PROFILESTATS", "0")
+        if (DdoSettings.fastCpu(context)) {
+            env.put("FEX_TSOENABLED", "0")
+            env.put("FEX_HALFBARRIERTSOENABLED", "0")
+        }
         if (DdoSettings.renderer(context) == DdoRenderer.OPENGL) env.put("MESA_LOADER_DRIVER_OVERRIDE", "zink")
         val request = JSONObject()
             .put("proton", proton)

@@ -66,20 +66,31 @@ def fit_display(prefs):
 
 
 def big_cores():
-    """The cores faster than the slowest cluster: the game and Wine stay off the little cores."""
-    speeds = {}
+    """The cores the game and Wine run on: not the little cluster, and not a cluster the vendor holds below a smaller
+    one. vivo, for one, caps an app's prime core under its mid cores and parks it near its minimum clock."""
+    hw, cap = {}, {}
     for name in os.listdir("/sys/devices/system/cpu"):
         if not (name.startswith("cpu") and name[3:].isdigit()):
             continue
+        base = "/sys/devices/system/cpu/%s/cpufreq/" % name
         try:
-            with open("/sys/devices/system/cpu/%s/cpufreq/cpuinfo_max_freq" % name) as f:
-                speeds[int(name[3:])] = int(f.read())
+            with open(base + "cpuinfo_max_freq") as f:
+                hw[int(name[3:])] = int(f.read())
+            with open(base + "scaling_max_freq") as f:
+                cap[int(name[3:])] = int(f.read())
         except (OSError, ValueError):
             pass
-    if len(set(speeds.values())) < 2:
+    if len(set(hw.values())) < 2:
         return []
-    slowest = min(speeds.values())
-    return sorted(c for c, s in speeds.items() if s > slowest)
+    slowest = min(hw.values())
+    chosen = []
+    for c in sorted(hw):
+        if hw[c] == slowest:
+            continue
+        held_back = any(hw[o] < hw[c] and hw[o] > slowest and cap[o] > cap[c] for o in hw)
+        if not held_back:
+            chosen.append(c)
+    return chosen
 
 
 def main(argv):

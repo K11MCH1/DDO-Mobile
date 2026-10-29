@@ -106,7 +106,14 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
     private fun watchSession() {
         if (fps.visibility == View.VISIBLE) fps.text = "%.0f fps".format(Compositor.nativeFramesPerSecond())
         when (val s = GameSession.state.value) {
-            is GameSession.State.Running -> { outWidth = s.width; outHeight = s.height; status.visibility = View.GONE }
+            is GameSession.State.Running -> {
+                if (outWidth != s.width || outHeight != s.height) {
+                    outWidth = s.width; outHeight = s.height
+                    // The screen's own scaler upscales the game for free; the compositor draws at render size.
+                    surface.holder.setFixedSize(outWidth, outHeight)
+                }
+                status.visibility = View.GONE
+            }
             is GameSession.State.Ended -> showEnded(s)
             GameSession.State.Idle -> finish()
         }

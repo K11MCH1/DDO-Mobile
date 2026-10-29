@@ -111,6 +111,7 @@ class LauncherActivity : ComponentActivity() {
     private var fps by mutableIntStateOf(60)
     private var highRes by mutableStateOf(true)
     private var hud by mutableStateOf(false)
+    private var fastCpu by mutableStateOf(true)
 
     private val pickDriver = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(::importDriver) }
 
@@ -127,6 +128,7 @@ class LauncherActivity : ComponentActivity() {
         fps = DdoSettings.frameLimit(this)
         highRes = DdoSettings.highRes(this)
         hud = DdoSettings.showHud(this)
+        fastCpu = DdoSettings.fastCpu(this)
         setContent { DdoTheme { Screen() } }
         loadWorlds()
     }
@@ -420,6 +422,7 @@ class LauncherActivity : ComponentActivity() {
             }
             Toggle("High-resolution textures", highRes) { highRes = it; DdoSettings.setHighRes(this, it) }
             Toggle("Performance overlay (DXVK)", hud) { hud = it; DdoSettings.setShowHud(this, it) }
+            Toggle("Fast CPU mode (turn off if the game hangs or crashes)", fastCpu) { fastCpu = it; DdoSettings.setFastCpu(this, it) }
         }
     }
 

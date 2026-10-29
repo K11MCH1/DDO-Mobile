@@ -75,6 +75,13 @@ object DdoSettings {
     fun highRes(context: Context): Boolean = prefs(context).getBoolean("highres", true)
     fun setHighRes(context: Context, value: Boolean) = prefs(context).edit().putBoolean("highres", value).apply()
 
+    /**
+     * Fast CPU mode turns off FEX's emulation of x86 memory ordering (TSO): DDO's executable has no volatile
+     * metadata, so FEX would otherwise order every memory access. Safe mode keeps it, for if the game misbehaves.
+     */
+    fun fastCpu(context: Context): Boolean = prefs(context).getBoolean("fastCpu", true)
+    fun setFastCpu(context: Context, value: Boolean) = prefs(context).edit().putBoolean("fastCpu", value).apply()
+
     fun showHud(context: Context): Boolean = prefs(context).getBoolean("hud", false)
     fun setShowHud(context: Context, value: Boolean) = prefs(context).edit().putBoolean("hud", value).apply()
 }
