@@ -24,3 +24,27 @@ Taken from DroidDeck's `app/src/main/cpp/waylandcomp/` and modified (reduced to 
 
 `compositor/adrenotools/` is DroidDeck's copy at `app/src/main/cpp/adrenotools/` (library, hooks and
 `lib/linkernsbypass`), unmodified; the `tools/` directory and meson files were not taken.
+
+## Other parts from DroidDeck (GPL-3.0)
+
+| DDO Mobile | DroidDeck source |
+| --- | --- |
+| `runtime/shims/preload/*.c` (compiled into the runtime as `libddoshim.so`) | `tools/linuxfs/preload/` |
+| `runtime/shims/fastpath/*` | `tools/proot/fastpath/` |
+| `runtime/shims/ssbs/ssbs_adapter.c` | `tools/linuxfs/ssbs/` |
+| `runtime/shims/quest/kgsl_compat.h` | `tools/quest/kgsl_compat.h` |
+| proot (`libproot.so`, `libproot-loader.so`, downloaded at build time, checksum pinned) | `pack-proot-5a2b7284e6357f88` on Droid-Deck/DroidDeck-Components (PRoot, GPL-2.0-or-later, with DroidDeck's patches) |
+| `app/src/main/jniLibs/arm64-v8a/libpulse*.so`, `libsndfile.so`, `libltdl.so`, `libffi.so`, `assets/pulseaudio.tzst` | DroidDeck's Android PulseAudio 13 build and modules (PulseAudio LGPL-2.1-or-later, libsndfile LGPL-2.1-or-later, libltdl LGPL-2.1-or-later with exception, libffi MIT) |
+
+The session design (proot binds, the KGSL render-node stand-in, the Proton launch environment) follows DroidDeck's
+`LinuxRuntime.java`, `droiddeck-session` and `droiddeck-proton-run`.
+
+## OneLauncher (GPL-3.0) — https://github.com/JuneStepp/OneLauncher
+
+The GLS sign-in, world status, login-queue and client-argument flow in `ddo/DdoGls.kt` follows OneLauncher's
+`network/` and `start_game.py`.
+
+## Downloaded at runtime
+
+DroidDeck-Proton (https://github.com/Droid-Deck/DroidDeck-Proton), DD-Turnip (https://github.com/Droid-Deck/Drivers-CI)
+and the Arch Linux ARM packages in the runtime keep their own licences.

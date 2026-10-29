@@ -26,30 +26,36 @@ fi
 # A lingering gpg-agent keeps proot (and so the whole build) from exiting.
 gpgconf --homedir "$gpgdir" --kill gpg-agent 2>/dev/null || true
 
-step "build tools"
-# The compiler gets a root of its own: the build host's /usr may not be writable, and nothing of it ships.
-tools=$out/tools
-mkdir -p "$tools/var/lib/pacman"
-pacman --config "$conf" --root "$tools" --cachedir "$out/cache" -Sy --noconfirm --needed gcc binutils glibc linux-api-headers \
-  >/dev/null || pacman --config "$conf" --root "$tools" -Q gcc binutils >/dev/null
-cc() { PATH="$tools/usr/bin:$PATH" gcc --sysroot="$tools" -B"$tools/usr/bin" "$@"; }
 step "packages"
+# gcc and binutils come in only to compile the shims inside the runtime, and leave before packing.
+build_only=(gcc binutils)
 mapfile -t pkgs < <(grep -vE '^\s*(#|$)' "$here/packages.txt")
-pacman --config "$conf" --root "$root" --cachedir "$out/cache" -Sy --noconfirm --needed "${pkgs[@]}" || {
+pacman --config "$conf" --root "$root" --cachedir "$out/cache" -Sy --noconfirm --needed "${pkgs[@]}" "${build_only[@]}" || {
   # Install hooks need chroot, which a proot build host may refuse; the packages themselves are in place.
   echo "pacman reported errors; continuing if the packages are installed"
-  pacman --config "$conf" --root "$root" -Q "${pkgs[@]}" >/dev/null
+  pacman --config "$conf" --root "$root" -Q "${pkgs[@]}" "${build_only[@]}" >/dev/null
 }
+# Android refuses hard links in app storage; make the names the packages wanted as copies.
+python3 "$here/repair-hardlinks.py" "$root" "$out/cache" "$conf"
 
 step "shims"
-lib=$root/usr/local/lib
-mkdir -p "$lib"
-cc -shared -fPIC -O2 -Wall -pthread -o "$lib/libddoshim.so" "$here"/shims/preload/*.c -ldl
-cc -shared -fPIC -O2 -Wall -pthread -o "$lib/libddofastpath.so" "$here/shims/fastpath/fastpath.c" -ldl
-cc -shared -fPIC -O2 -Wall -nostdlib -ffreestanding -fno-stack-protector -fno-tree-loop-distribute-patterns \
-  -Wl,-z,defs -o "$lib/libddoaudit.so" "$here/shims/fastpath/audit.c"
-cc -shared -fPIC -O2 -Wall -pthread -o "$lib/libddossbs.so" "$here/shims/ssbs/ssbs_adapter.c" -ldl
-"$tools/usr/bin/strip" --strip-unneeded "$lib"/libddo*.so
+mkdir -p "$root/usr/local/lib" "$root/tmp/ddo-shims"
+cp -a "$here/shims/." "$root/tmp/ddo-shims/"
+cat > "$root/tmp/ddo-shims/build.sh" <<'SHIMS'
+set -euo pipefail
+cd /tmp/ddo-shims
+lib=/usr/local/lib
+gcc -shared -fPIC -O2 -Wall -pthread -o $lib/libddoshim.so preload/*.c -ldl
+gcc -shared -fPIC -O2 -Wall -pthread -o $lib/libddofastpath.so fastpath/fastpath.c -ldl
+gcc -shared -fPIC -O2 -Wall -nostdlib -ffreestanding -fno-stack-protector -fno-tree-loop-distribute-patterns \
+  -Wl,-z,defs -o $lib/libddoaudit.so fastpath/audit.c
+gcc -shared -fPIC -O2 -Wall -pthread -o $lib/libddossbs.so ssbs/ssbs_adapter.c -ldl
+strip --strip-unneeded $lib/libddo*.so
+SHIMS
+chroot "$root" /usr/bin/env -i PATH=/usr/bin HOME=/root /bin/bash /tmp/ddo-shims/build.sh
+rm -rf "$root/tmp/ddo-shims"
+ls -la "$root"/usr/local/lib/libddo*.so
+pacman --config "$conf" --root "$root" -Rns --noconfirm "${build_only[@]}" || true
 
 step "overlay"
 cp -a "$here/overlay/." "$root/"
