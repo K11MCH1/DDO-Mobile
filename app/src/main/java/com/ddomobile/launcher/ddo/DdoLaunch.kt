@@ -135,6 +135,18 @@ object DdoLaunch {
         // gamescope shows whole frames only, so the game's own vsync never prevents tearing; on a 60 Hz panel it
         // just drops a frame that misses one refresh straight to 30 fps.
         ini["Display", "SyncToRefresh"] = "False"
+        // The touch layer drives DDO's classic mouse: a tap is a left click that selects, and a drag holds the right
+        // button to steer the camera. DDO's own defaults (left click attacks, the newer mouse mapping) turned taps into
+        // attacks and let go of the camera the moment a drag began.
+        ini["Input", "LMBAttacks"] = "False"
+        ini["Input", "UsesClassicMouseMapping"] = "True"
+        ini["Input", "UsesRelaunchMapping"] = "False"
+        ini["Input", "KeyMappingArchetype"] = "3"
+        // The camera feel tuned on the first phone, set once: later changes in the game's options win.
+        if (ini["Launcher", "DdoMobileTouchCamera"] != TOUCH_CAMERA_VERSION) {
+            TOUCH_CAMERA.forEach { (section, key, value) -> ini[section, key] = value }
+            ini["Launcher", "DdoMobileTouchCamera"] = TOUCH_CAMERA_VERSION
+        }
         val quality = DdoSettings.quality(context)
         if (ini["Launcher", "DdoMobileQuality"] != quality.name) {
             QUALITY.getValue(quality).forEach { (k, v) -> ini["Render", k] = v }
@@ -142,6 +154,15 @@ object DdoLaunch {
         }
         file.writeText(ini.toString())
     }
+
+    private const val TOUCH_CAMERA_VERSION = "1"
+    private val TOUCH_CAMERA = listOf(
+        Triple("Input", "MouseLookSensitivity", "0.59"),
+        Triple("Input", "MouseLookSmoothingAmount", "0.00"),
+        Triple("Input", "InvertMouseLookYAxis", "False"),
+        Triple("Camera", "AlignToSlope", "False"),
+        Triple("Camera", "ResetYawWhenPlayerMoves", "False"),
+    )
 
     private val QUALITY = mapOf(
         DdoQuality.LOW to mapOf(
