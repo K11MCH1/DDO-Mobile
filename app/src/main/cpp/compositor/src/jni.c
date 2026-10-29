@@ -35,6 +35,9 @@ JNIEXPORT jboolean JNICALL JNI_FN(nativeStart)(JNIEnv *env, jobject thiz, jstrin
     char path[512];
     int ok = 0;
     if (rt && sock && *sock) {
+        char logpath[512];
+        snprintf(logpath, sizeof(logpath), "%s/compositor.log", rt);
+        ddo_log_open(logpath);
         if (sock[0] == '/') snprintf(path, sizeof(path), "%s", sock);
         else snprintf(path, sizeof(path), "%s/%s", rt, sock);
         if (!compositor_running()) {

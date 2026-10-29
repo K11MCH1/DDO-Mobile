@@ -18,6 +18,7 @@ add_library(ddocompositor SHARED
         src/vk_loader.c
         src/blend_pass.c
         src/jni.c
+        src/ddo_log.c
         generated/xdg-shell-protocol.c
         generated/linux-dmabuf-v1-protocol.c
         generated/viewporter-protocol.c

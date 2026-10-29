@@ -48,8 +48,10 @@ object GameSession {
 
         proot.prepareAccount()
         writeNetworkFiles(app, paths)
+        paths.run.mkdirs()
         File(paths.run, Paths.WAYLAND_SOCKET).delete()
         File(paths.run, Paths.WAYLAND_SOCKET + ".lock").delete()
+        File(paths.run, "compositor.log").delete()
 
         val androidDriver = drivers.selectedAndroid()
         val started = Compositor.nativeStart(
@@ -129,6 +131,59 @@ object GameSession {
         File(etc, "resolv.conf").apply { delete() }.writeText(servers.joinToString("") { "nameserver $it\n" })
         File(etc, "hosts").writeText("127.0.0.1 localhost\n::1 localhost\n127.0.1.1 ddo-mobile\n")
         File(etc, "hostname").writeText("ddo-mobile\n")
+        writeCertificates(etc)
+        writeLink(cm, etc)
+        // dbus and Wine expect a machine id; one per install, never shared between phones.
+        File(etc, "machine-id").takeIf { !it.isFile || it.length() < 32 }
+            ?.writeText(java.util.UUID.randomUUID().toString().replace("-", "") + "\n")
+    }
+
+    /**
+     * Android refuses netlink to apps, so the guest can't list its network interfaces; the netif shim answers
+     * getifaddrs, ioctls and Wine's adapter queries from this description of the active link instead.
+     */
+    private fun writeLink(cm: ConnectivityManager, etc: File) {
+        val file = File(etc, "droiddeck-net")
+        val props = runCatching { cm.getLinkProperties(cm.activeNetwork) }.getOrNull()
+        val name = props?.interfaceName
+        if (props == null || name == null) { file.delete(); return }
+        val nif = runCatching { java.net.NetworkInterface.getByName(name) }.getOrNull()
+        val index = nif?.index?.takeIf { it > 1 } ?: 2
+        val mtu = props.mtu.takeIf { it > 0 } ?: nif?.mtu?.takeIf { it > 0 } ?: 1500
+        // Apps can't read the hardware address; a stable, locally administered one stands in.
+        val mac = (nif?.hardwareAddress?.takeIf { it.size == 6 && it.any { b -> b.toInt() != 0 } }
+            ?: byteArrayOf(0x02, 0x44, 0x44, 0x4f, 0x4d, 0x42)).joinToString(":") { "%02x".format(it) }
+        val text = buildString {
+            append("if $name $index $mtu\n")
+            append("mac $mac\n")
+            props.linkAddresses.forEach { append("addr ${it.address.hostAddress?.substringBefore('%')} ${it.prefixLength}\n") }
+            props.routes.filter { it.isDefaultRoute && it.gateway != null }.take(2)
+                .forEach { append("gw ${it.gateway!!.hostAddress?.substringBefore('%')}\n") }
+        }
+        file.writeText(text)
+    }
+
+    /**
+     * The runtime's TLS trust bundle, from Android's own (updatable) CA store, so DDO's ticket refresh and store pages
+     * over HTTPS validate exactly as Android would. Arch's ca-certificates.crt links to the extracted bundle.
+     */
+    private fun writeCertificates(etc: File) {
+        val store = listOf(File("/apex/com.android.conscrypt/cacerts"), File("/system/etc/security/cacerts"))
+            .firstOrNull { it.list()?.isNotEmpty() == true } ?: return
+        val pem = Regex("-----BEGIN CERTIFICATE-----[\\s\\S]+?-----END CERTIFICATE-----")
+        val bundle = store.listFiles().orEmpty().sortedBy { it.name }.flatMap { f ->
+            runCatching { pem.findAll(f.readText()).map { it.value }.toList() }.getOrDefault(emptyList())
+        }
+        if (bundle.isEmpty()) return
+        val text = bundle.joinToString("\n", postfix = "\n")
+        File(etc, "ca-certificates/extracted").mkdirs()
+        File(etc, "ca-certificates/extracted/tls-ca-bundle.pem").writeText(text)
+        val link = File(etc, "ssl/certs/ca-certificates.crt")
+        if (!java.nio.file.Files.exists(link.toPath())) {
+            link.parentFile?.mkdirs()
+            java.nio.file.Files.deleteIfExists(link.toPath())
+            link.writeText(text)
+        }
     }
 
     private fun pruneLogs(dir: File) {

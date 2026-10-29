@@ -79,7 +79,8 @@ object DdoLaunch {
 
     private fun write(context: Context, paths: Paths, proton: String, install: String, clientArgs: List<String>): String {
         writePreferences(context, prefsFile(paths))
-        val env = JSONObject()
+        // Proton starts xalia (controller accessibility for Steam Deck) by default; DDO has no use for it.
+        val env = JSONObject().put("PROTON_USE_XALIA", "0")
         if (DdoSettings.showHud(context)) env.put("DXVK_HUD", "fps,frametimes,gpuload")
         if (DdoSettings.renderer(context) == DdoRenderer.OPENGL) env.put("MESA_LOADER_DRIVER_OVERRIDE", "zink")
         val request = JSONObject()

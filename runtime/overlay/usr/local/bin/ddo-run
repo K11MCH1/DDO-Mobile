@@ -65,6 +65,23 @@ def fit_display(prefs):
     say("display set to %dx%d" % (width, height))
 
 
+def big_cores():
+    """The cores faster than the slowest cluster: the game and Wine stay off the little cores."""
+    speeds = {}
+    for name in os.listdir("/sys/devices/system/cpu"):
+        if not (name.startswith("cpu") and name[3:].isdigit()):
+            continue
+        try:
+            with open("/sys/devices/system/cpu/%s/cpufreq/cpuinfo_max_freq" % name) as f:
+                speeds[int(name[3:])] = int(f.read())
+        except (OSError, ValueError):
+            pass
+    if len(set(speeds.values())) < 2:
+        return []
+    slowest = min(speeds.values())
+    return sorted(c for c, s in speeds.items() if s > slowest)
+
+
 def main(argv):
     if len(argv) != 2 or argv[0] != "--args-file":
         say("usage: ddo-run --args-file PATH")
@@ -98,7 +115,18 @@ def main(argv):
         "SteamAppId": "0",
         "SteamGameId": "0",
         "PROTON_LOG_DIR": os.path.join(prefix, "logs"),
+        # KGSL maps host-visible memory uncached by default, which makes every CPU read of it crawl.
+        "tu_override_uncached_as_cache_coherent": "true",
+        "vblank_mode": "0",
     })
+    cores = big_cores()
+    if cores:
+        env["WINE_CPU_TOPOLOGY"] = env["PROTON_CPU_TOPOLOGY"] = "%d:%s" % (len(cores), ",".join(map(str, cores)))
+        try:
+            os.sched_setaffinity(0, cores)
+        except OSError as e:
+            say("could not keep to cores %s: %s" % (cores, e))
+        say("game cores %s" % ",".join(map(str, cores)))
     env.update({str(k): str(v) for k, v in (request.get("env") or {}).items()})
     if request.get("prefs"):
         fit_display(str(request["prefs"]))

@@ -182,6 +182,18 @@ class LauncherActivity : ComponentActivity() {
 
     private fun downloadDriver() = work("Installing DD-Turnip") { stage -> drivers.downloadLatest(stage) }
 
+    /** Whatever is still missing, in order: runtime, Proton, Turnip. */
+    private fun setUpEverything() = work("Setting up") { stage ->
+        if (runtime.installedVersion() == null) {
+            val archive = runtime.localArchive() ?: throw java.io.IOException("Put ddo-runtime-*.tar.zst in Download first")
+            runtime.install(archive, null, stage)
+        }
+        if (protons.selected() == null) protons.install(ProtonStore.DROIDDECK, stage)
+        if (drivers.selectedLinux() == null) drivers.downloadLatest(stage)
+    }
+
+    private val needsSetup get() = runtimeVersion == null || protonName == null || driverName == null
+
     private fun importDriver(uri: Uri) = work("Importing the driver") { stage ->
         stage("Copying the driver", -1f)
         val copy = File(cacheDir, "import-driver.zip")
@@ -344,6 +356,9 @@ class LauncherActivity : ComponentActivity() {
     @Composable
     private fun SetupPanel() {
         Panel("Setup") {
+            if (needsSetup && (runtimeVersion != null || runtimeArchive != null)) {
+                Button(::setUpEverything, enabled = busy == null, modifier = Modifier.fillMaxWidth()) { Text("Set up everything") }
+            }
             Check("Game files", installProblem == null, installProblem ?: installPath,
                 if (!storageAllowed) "Allow" else null, ::requestStorage)
             Check("Runtime", runtimeVersion != null,

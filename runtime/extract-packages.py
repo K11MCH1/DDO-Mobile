@@ -14,7 +14,7 @@ import tarfile
 
 def safe(dest, name):
     path = os.path.normpath(os.path.join(dest, name))
-    if not (path == dest or path.startswith(dest + os.sep)):
+    if os.path.commonpath([dest, path]) != dest:
         raise ValueError("unsafe path %s" % name)
     return path
 

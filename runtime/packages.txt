@@ -31,6 +31,8 @@ libxrender
 libxxf86vm
 libxkbcommon
 vulkan-icd-loader
+# The Linux Turnip build links xcb-keysyms
+xcb-util-keysyms
 mesa
 libglvnd
 # Text, TLS (DDO refreshes its login ticket over HTTPS) and system services Wine looks up
