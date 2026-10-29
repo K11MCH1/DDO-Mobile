@@ -16,28 +16,54 @@ class Proot(private val paths: Paths) {
         "PROOT_TMP_DIR" to paths.prootTmp.apply { mkdirs() }.path,
     )
 
-    fun command(guest: List<String>): List<String> {
+    /** The host paths the guest sees, as proot's -b specs. */
+    fun binds(): List<String> {
+        val specs = mutableListOf(
+            "/dev", "/proc", "/sys", "/dev/urandom:/dev/random",
+            "/proc/self/fd:/dev/fd", "/proc/self/fd/0:/dev/stdin", "/proc/self/fd/1:/dev/stdout", "/proc/self/fd/2:/dev/stderr",
+            "${emptyDir("empty").path}:/sys/fs/selinux",
+            "${paths.run.apply { mkdirs() }.path}:${Paths.GUEST_RUN}",
+            "${File(paths.files, "shm").apply { mkdirs() }.path}:/dev/shm",
+        )
+        val storage = Environment.getExternalStorageDirectory()
+        if (storage.canRead()) specs += "${storage.path}:${Paths.GUEST_STORAGE}"
+        specs += fakeProcFiles()
+        gpuNode()?.let { specs += it }
+        return specs
+    }
+
+    fun command(binds: List<String>, guest: List<String>): List<String> {
         // The app's own uid inside, with proot answering set*id: Xwayland changes ids, and files keep one owner.
         val uid = android.os.Process.myUid()
         val cmd = mutableListOf(binary.path, "--kill-on-exit", "--kernel-release=6.6.0-ddo", "-i", "$uid:$uid", "-r", paths.rootfs.path, "-w", "/root")
-        fun bind(spec: String) { cmd += "-b"; cmd += spec }
-        bind("/dev")
-        bind("/proc")
-        bind("/sys")
-        bind("/dev/urandom:/dev/random")
-        bind("/proc/self/fd:/dev/fd")
-        bind("/proc/self/fd/0:/dev/stdin")
-        bind("/proc/self/fd/1:/dev/stdout")
-        bind("/proc/self/fd/2:/dev/stderr")
-        bind("${emptyDir("empty").path}:/sys/fs/selinux")
-        bind("${paths.run.apply { mkdirs() }.path}:${Paths.GUEST_RUN}")
-        bind("${File(paths.files, "shm").apply { mkdirs() }.path}:/dev/shm")
-        val storage = Environment.getExternalStorageDirectory()
-        if (storage.canRead()) bind("${storage.path}:${Paths.GUEST_STORAGE}")
-        fakeProcFiles().forEach(::bind)
-        gpuNode()?.forEach(::bind)
+        binds.forEach { cmd += "-b"; cmd += it }
         cmd += guest
         return cmd
+    }
+
+    /**
+     * proot's in-process fast path (DroidDeck's patched proot, patch 0014): a preloaded library answers path
+     * syscalls inside the calling process instead of trapping to the single tracer. Both sides must agree on a key
+     * derived from the root and the binds, or proot keeps the slow path.
+     */
+    fun fastPathKey(binds: List<String>): String? {
+        if (binds.size > 256 || binds.any { '|' in it } || '|' in paths.rootfs.path) return null
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest((paths.rootfs.path + "\n" + binds.joinToString("\n")).toByteArray())
+        return digest.take(12).joinToString("") { "%02x".format(it) }
+    }
+
+    fun fastPathGuestEnv(binds: List<String>, key: String): Map<String, String> = mapOf(
+        "PROOT_FP_ROOT" to paths.rootfs.path,
+        "PROOT_FP_BINDS" to binds.joinToString("|"),
+        "PROOT_FP_KEY" to key,
+        "PROOT_FP_ANDROID_API" to android.os.Build.VERSION.SDK_INT.toString(),
+    )
+
+    /** The libraries every guest process loads: the Android shims, and the fast path when it's on. */
+    fun writePreload(fastPath: Boolean) {
+        val libs = listOf("/usr/local/lib/libddoshim.so") + if (fastPath) listOf("/usr/local/lib/libddofastpath.so") else emptyList()
+        File(paths.rootfs, "etc/ld.so.preload").writeText(libs.joinToString("\n", postfix = "\n"))
     }
 
     /** Gives the app's uid a name and the /root home inside, so getpwuid() works for Wine and Python. */

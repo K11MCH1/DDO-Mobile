@@ -80,15 +80,21 @@ object GameSession {
             "TMPDIR" to "/tmp",
         )
         drivers.selectedLinux()?.let { env["VK_ICD_FILENAMES"] = drivers.linuxIcd(it) }
+        val binds = proot.binds()
+        val fastPath = if (File(paths.rootfs, "usr/local/lib/libddofastpath.so").isFile) proot.fastPathKey(binds) else null
+        fastPath?.let { env.putAll(proot.fastPathGuestEnv(binds, it)) }
+        proot.writePreload(fastPath != null)
         env.putAll(extraEnv)
         val guest = listOf("/usr/bin/env", "-i") + env.map { (k, v) -> "$k=$v" } +
             listOf("/bin/bash", "/usr/local/bin/ddo-session", argsFile)
+        log.appendText("== proot fast path: ${if (fastPath != null) "on" else "off"}\n")
 
-        val builder = ProcessBuilder(proot.command(guest))
+        val builder = ProcessBuilder(proot.command(binds, guest))
             .directory(paths.files)
             .redirectErrorStream(true)
             .redirectOutput(ProcessBuilder.Redirect.appendTo(log))
         builder.environment().putAll(proot.hostEnvironment())
+        fastPath?.let { builder.environment()["PROOT_FASTPATH"] = it }
         val proc = try {
             builder.start()
         } catch (e: Exception) {

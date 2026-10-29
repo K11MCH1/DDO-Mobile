@@ -35,6 +35,7 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
     private lateinit var controls: TouchControls
     private lateinit var typing: EditText
     private lateinit var status: TextView
+    private lateinit var fps: TextView
     private var outWidth = 1
     private var outHeight = 1
     private var watching = true
@@ -71,6 +72,14 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
         root.addView(surface, FrameLayout.LayoutParams(-1, -1))
         root.addView(typing, FrameLayout.LayoutParams(1, 1))
         root.addView(controls, FrameLayout.LayoutParams(-1, -1))
+        fps = TextView(this).apply {
+            setTextColor(0xFFF1E6D2.toInt())
+            textSize = 12f
+            setShadowLayer(3f, 0f, 0f, 0xFF000000.toInt())
+            setPadding(24, 12, 24, 12)
+            visibility = if (prefs().getBoolean("fps", true)) View.VISIBLE else View.GONE
+        }
+        root.addView(fps, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START))
         root.addView(status, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
         hideSystemBars()
@@ -92,7 +101,10 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
         super.onDestroy()
     }
 
+    private fun prefs() = getSharedPreferences("game", Context.MODE_PRIVATE)
+
     private fun watchSession() {
+        if (fps.visibility == View.VISIBLE) fps.text = "%.0f fps".format(Compositor.nativeFramesPerSecond())
         when (val s = GameSession.state.value) {
             is GameSession.State.Running -> { outWidth = s.width; outHeight = s.height; status.visibility = View.GONE }
             is GameSession.State.Ended -> showEnded(s)
@@ -138,13 +150,22 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
 
     override fun menu() {
         controls.releaseAll()
-        val items = arrayOf(if (controls.controlsVisible) "Hide touch controls" else "Show touch controls", "Keyboard", "Quit the game")
+        val items = arrayOf(
+            if (controls.controlsVisible) "Hide touch controls" else "Show touch controls",
+            if (fps.visibility == View.VISIBLE) "Hide FPS" else "Show FPS",
+            "Keyboard", "Quit the game",
+        )
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setItems(items) { _, which ->
                 when (which) {
                     0 -> controls.controlsVisible = !controls.controlsVisible
-                    1 -> keyboard()
-                    2 -> confirmQuit()
+                    1 -> {
+                        val show = fps.visibility != View.VISIBLE
+                        fps.visibility = if (show) View.VISIBLE else View.GONE
+                        prefs().edit().putBoolean("fps", show).apply()
+                    }
+                    2 -> keyboard()
+                    3 -> confirmQuit()
                 }
             }
             .show()

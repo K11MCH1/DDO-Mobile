@@ -118,7 +118,14 @@ def main(argv):
         # KGSL maps host-visible memory uncached by default, which makes every CPU read of it crawl.
         "tu_override_uncached_as_cache_coherent": "true",
         "vblank_mode": "0",
+        # Larger audio periods: fewer wake-ups across Wine, PulseAudio and the AAudio sink, which together kept
+        # about 40% of a core busy with the default short periods.
+        "PULSE_LATENCY_MSEC": "60",
     })
+    audit = "/usr/local/lib/libddoaudit.so"
+    if env.get("PROOT_FP_KEY") and os.path.isfile(audit):
+        # Paired with the proot fast path for Proton's processes, as DroidDeck's Proton wrapper does.
+        env["LD_AUDIT"] = audit + (":" + env["LD_AUDIT"] if env.get("LD_AUDIT") else "")
     cores = big_cores()
     if cores:
         env["WINE_CPU_TOPOLOGY"] = env["PROTON_CPU_TOPOLOGY"] = "%d:%s" % (len(cores), ",".join(map(str, cores)))
