@@ -1,0 +1,114 @@
+plugins {
+    id 'com.android.application'
+}
+apply plugin: 'kotlin-android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+
+android {
+    namespace 'com.ddomobile.launcher'
+    compileSdk 35
+    ndkVersion '27.3.13750724'
+
+    defaultConfig {
+        applicationId 'com.ddomobile.launcher'
+        minSdkVersion 28
+        // proot maps the runtime's programs from app storage, which Android allows only below API 29.
+        targetSdkVersion 28
+        versionCode 1
+        versionName '0.1.0'
+        ndk { abiFilters 'arm64-v8a' }
+        externalNativeBuild {
+            cmake { arguments '-DANDROID_STL=c++_static' }
+        }
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file("${rootDir}/keystore/debug.p12")
+            storeType 'PKCS12'
+            storePassword 'android'
+            keyAlias 'debug'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        debug { signingConfig signingConfigs.debug }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    externalNativeBuild {
+        cmake { path 'src/main/cpp/CMakeLists.txt' }
+    }
+
+    packagingOptions {
+        jniLibs { useLegacyPackaging = true }
+    }
+
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+
+    lint { disable 'ExpiredTargetSdkVersion' }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+}
+
+// proot with DroidDeck's Android patches and in-process fast path, from its published, content-addressed pack.
+def prootPack = [
+    url: 'https://github.com/Droid-Deck/DroidDeck-Components/releases/download/pack-proot-5a2b7284e6357f88/proot.tar.zst',
+    sha256: '5a2b7284e6357f88a14a790abd54e61effbe5f202c63b6aaba9b974c559649c3',
+]
+def prootLibs = layout.buildDirectory.dir('proot/jniLibs')
+def fetchProot = tasks.register('fetchProot') {
+    inputs.property('sha256', prootPack.sha256)
+    outputs.dir(prootLibs)
+    doLast {
+        def archive = layout.buildDirectory.file('proot/proot.tar.zst').get().asFile
+        archive.parentFile.mkdirs()
+        def digest = { File f ->
+            def md = java.security.MessageDigest.getInstance('SHA-256')
+            f.withInputStream { s -> byte[] b = new byte[1 << 16]; int n; while ((n = s.read(b)) > 0) md.update(b, 0, n) }
+            md.digest().encodeHex().toString()
+        }
+        if (!archive.isFile() || digest(archive) != prootPack.sha256) {
+            new URL(prootPack.url).withInputStream { i -> archive.withOutputStream { o -> o << i } }
+        }
+        if (digest(archive) != prootPack.sha256) throw new GradleException("proot pack checksum mismatch")
+        def abiDir = new File(prootLibs.get().asFile, 'arm64-v8a')
+        abiDir.mkdirs()
+        new org.apache.commons.compress.archivers.tar.TarArchiveInputStream(
+            new com.github.luben.zstd.ZstdInputStream(new BufferedInputStream(new FileInputStream(archive)))).withCloseable { tar ->
+            def entry
+            while ((entry = tar.nextEntry) != null) {
+                if (entry.isFile() && entry.name ==~ /libproot(-loader)?\.so/) {
+                    new File(abiDir, entry.name).withOutputStream { o -> o << tar }
+                }
+            }
+        }
+    }
+}
+android.sourceSets.main.jniLibs.srcDir(prootLibs)
+tasks.named('preBuild').configure { dependsOn(fetchProot) }
+
+dependencies {
+    implementation 'com.github.luben:zstd-jni:1.5.7-4@aar'
+    implementation 'org.apache.commons:commons-compress:1.27.1'
+    implementation 'org.tukaani:xz:1.10'
+    implementation platform('androidx.compose:compose-bom:2024.02.00')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.activity:activity-compose:1.8.2'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+
+    testImplementation 'junit:junit:4.13.2'
+    testRuntimeOnly 'com.github.luben:zstd-jni:1.5.7-4@jar'
+}

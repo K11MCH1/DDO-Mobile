@@ -1,0 +1,47 @@
+# Arch Linux ARM packages in the DDO Mobile runtime. Only what one gamescope + Xwayland + Proton session needs.
+# Base userspace for the session and Proton's launcher script
+bash
+coreutils
+findutils
+grep
+sed
+gawk
+procps-ng
+util-linux
+which
+tar
+xz
+zstd
+python
+ca-certificates
+# Compositor and X server (gamescope pulls its own libraries)
+gamescope
+xorg-xwayland
+xorg-xrandr
+# Wine's X11, GL and Vulkan clients
+libx11
+libxcomposite
+libxcursor
+libxext
+libxfixes
+libxi
+libxinerama
+libxrandr
+libxrender
+libxxf86vm
+libxkbcommon
+vulkan-icd-loader
+mesa
+libglvnd
+# Text, TLS (DDO refreshes its login ticket over HTTPS) and system services Wine looks up
+fontconfig
+freetype2
+ttf-liberation
+gnutls
+krb5
+libpulse
+alsa-lib
+alsa-plugins
+dbus
+systemd-libs
+sdl2-compat

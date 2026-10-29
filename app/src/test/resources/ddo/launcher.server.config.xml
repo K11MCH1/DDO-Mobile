@@ -1,0 +1,128 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <appSettings>
+    <add key="LauncherConfig.DateTime" value="10/20/10 6:40 AM"/>
+    <add key="LauncherConfig.RefreshFrequency" value="15"/> <!-- minutes -->
+
+    <add key="GameName" value="DDO"/>
+    <add key="Patching.ProductCode" value="DDO"/>
+
+
+    <!-- CLIENT LAUNCHING -->
+    <add key="GameClient.WIN32.Filename" value="dndclient.exe"/>
+	<add key="GameClient.WIN64.Filename" value="dndclient64.exe" />
+    <add key="GameClient.WIN32.ArgTemplate" value="-a {SUBSCRIPTION} -h {LOGIN} --glsticketdirect {GLS} --chatserver {CHAT} --rodat on --language {LANG} --gametype DDO --authserverurl {AUTHSERVERURL} --glsticketlifetime {GLSTICKETLIFETIME}"/>
+	
+	<add key="GameClient.WIN32Legacy.Filename" value="dndclient_awesomium.exe" />
+
+    
+
+    <add key="EnableStayLoggedInFeature" value="False" />
+
+
+	
+    <add key="GameClient.OSX.Filename" value="dndclient.app"/>
+    <add key="GameClient.OSX.ArgTemplate" value="-a {SUBSCRIPTION} -h {LOGIN} --glsticketdirect {GLS} --chatserver {CHAT} --rodat on --language {LANG} --gametype DDO --authserverurl {AUTHSERVERURL} --glsticketlifetime {GLSTICKETLIFETIME} --supporturl {SUPPORTURL} --bugurl {BUGURL} --supportserviceurl {SUPPORTSERVICEURL}"/>
+
+    <add key="GameClient.Arg.crashreceiver" value="http://crash.ddo.com:8080/CrashReceiver-1.0"/>
+    <add key="GameClient.Arg.authserverurl" value="https://gls.ddo.com/GLS.AuthServer/Service.asmx"/>
+    <add key="GameClient.Arg.glsticketlifetime" value="21600"/>
+    <!-- CLIENT LAUNCHING -->	
+
+    <add key="GameClient.ResetGraphicsArg" value=" --safe"/>
+
+    <add key="GameClient.AlwaysPatchHighRes" value="true"/>
+    <!-- Standalone Updater -->
+    <add key="GameClient.RequiredVersion" value="0"/>
+    <add key="GameClient.ForwardVersion" value="0"/>
+    <add key="URL.UpdateDownload" value="http://downloads.turbine.com" />
+    <add key="Patch.UpdaterNameFormat" value="{0}updater_{1}_{2}.exe" />
+
+    <add key="DataCenterBrowser.BatchWorldStatus" value="true"/>
+
+
+    <add key="URL.Support" value="https://help.standingstonegames.com"/>
+    <add key="URL.Home" value="http://www.ddo.com"/>
+    <add key="URL.Community" value="https://forums.ddo.com/index.php"/>
+    <add key="URL.Account" value="https://myaccount.standingstonegames.com/?billing[target_lang]={lang}"/>
+    <add key="URL.NewAccount" value="https://signup.ddo.com/ddo.php"/>
+    <add key="URL.ForgotPassword" value="https://myaccount.standingstonegames.com/?page_id=29&amp;billing[process]=13"/>
+
+    <add key="URL.BannerSource.Steam" value="http://live.ddo.com/sites/ddolauncher/steam/{lang}/ddo_launcherad.png?x=0&amp;y=78" />
+    <add key="URL.NewAccount.Steam" value="http://live.ddo.com/sites/launcher/ddo/redirects/NewAccountSteam.php?lang={lang}" />
+	<add key="URL.PermaDeathServerInfo" value="https://www.ddo.com/news/ddo-hardcore-league"/>
+
+    <add key="URL.Account.Post" value="https://myaccount.standingstonegames.com/?page_id=29&amp;billing[target_lang]={lang}"/>
+    <add key="Format.Account.Login" value=""/>
+    <add key="Format.Account.BuyNow" value="form_user_name={0}&amp;form_user_pass={1}&amp;siteuser[action]=login&amp;billing[process]=17&amp;billing[forms][subscriptionName]={2}&amp;billing[scenario]=DDO_BUY_NOW_POPUP&amp;billing[forms][productCode]=DDO&amp;billing[forms][purchaseProductCode]=DDOBuy&amp;billing[forms][purchasePlanCode]=DDO-F2PUp" />
+    <add key="Activate.Account.BuyNow" value="false"/>
+    <add key="Activate.Account.VIPDisplay" value="true"/>
+    <add key="Threshold.Account.DaysLeft" value="15"/>
+    <add key="Activate.Account.DaysLeft" value="true"/>
+    <add key="LauncherConfig.SubscriptionRefreshFrequency" value="60"/>
+    <add key="Subscription.FreeToPlay" value="true"/>
+
+    <add key="URL.PrivacyPolicy" value="http://www.turbine.com/?page_id=59"/>
+
+    <add key="URL.NewsFeed" value="https://www.ddo.com/en/launcher-feed.xml"/>
+    <add key="Launcher.NewsFeedCSSUrl" value="http://live.ddo.com/sites/launcher/ddo/newsfeed.css"/>
+    <add key="URL.NewsStyleSheet" value="http://live.ddo.com/sites/launcher/ddo/newsstylesheet.xslt"/>
+    <add key="URL.AlertsStyleSheet" value="http://live.ddo.com/sites/launcher/ddo/alertsstylesheet.xslt"/>
+	<add key="URL.GameLaunchReportURL" value="https://webevents.daybreakgames.com/events"/>
+    <add key="URL.NewsFeed.Timeout" value="10" />
+
+    <add key="URL.LogoButton1" value="http://www.turbine.com"/>
+    <add key="URL.LogoButton2" value="http://www.wizards.com"/>
+    <add key="URL.LogoButton3" value="http://www.hasbro.com"/>
+    <add key="URL.LogoButton4" value="http://www.atari.com"/>
+
+    <add key="WorldUpdateRate" value="1"/>	            <!-- minutes -->
+
+    <add key="PatchWindow" value="30"/>	                <!-- minutes -->
+    <add key="PatchConnectRetryInterval" value="1"/>	<!-- minutes -->
+    <add key="DisablePatch" value="false"/>
+
+    <add key="EmailAddress.Errors" value="LauncherErrors@turbine.com"/>
+
+    <add key="Eula.en.FilePath" value="en\DDO Eula.rtf"/>
+
+    <add key="Legal.en.Titles" value="End User License Agreement|Terms of Service"/>
+    <add key="Legal.DE.Titles" value="Endnutzer-Lizenzvereinbarung|Nutzungsbedingungen"/>
+    <add key="Legal.FR.Titles" value="Contrat de License Utilisateur Final|Conditions de Service"/>
+    <add key="Legal.English.Titles" value="End User License Agreement|Terms of Service"/>
+    <add key="Legal.en-GB.Titles" value="End User License Agreement|Terms of Service"/>
+
+    <add key="Legal.en.FilePaths" value="en\DDO EULA.rtf|en\DDO TOS.rtf"/>
+    <add key="Legal.DE.FilePaths" value="DE\DDO EULA.rtf|DE\DDO TOS.rtf"/>
+    <add key="Legal.FR.FilePaths" value="FR\DDO EULA.rtf|FR\DDO TOS.rtf"/>
+    <add key="Legal.English.FilePaths" value="en\DDO EULA.rtf|en\DDO TOS.rtf"/>
+    <add key="Legal.en-GB.FilePaths" value="en\DDO EULA.rtf|en\DDO TOS.rtf"/>
+
+    <add key="URL.DownloadFilesList" value="http://akamai.ddo.com/ddo/patch/splashscreen/DownloadFilesList.xml"/>
+    <add key="URL.ReqSoftwareInstall" value="http://akamai.ddo.com/ddo/PreReqProd/PreInstallListDDOProd.xml"/>
+
+
+    <add key="URL.BannerSource" value="http://live.ddo.com/sites/ddolauncher/{lang}/ddo_launcherad.png?x=1&amp;y=77"/>
+    <add key="URL.BannerTarget" value="http://live.ddo.com/sites/launcher/ddo/redirects/BannerTarget.php?lang={lang}"/> 
+    <!-- Login Queue -->
+    <add key="WorldQueue.LoginQueue.URL" value="https://gls.ddo.com/GLS.AuthServer/LoginQueue.aspx"/> 
+    <add key="WorldQueue.TakeANumber.Parameters" value="command=TakeANumber&amp;subscription={0}&amp;ticket={1}&amp;ticket_type=GLS&amp;queue_url={2}"/>    
+    <add key="WorldQueue.LeaveQueue.Parameters" value="command=LeaveQueue&amp;subscription={0}&amp;context={1}&amp;ticket_type=GLS&amp;queue_url={2}"/> 
+    <add key="WorldQueue.Threshold.WaitTimeMultiplier" value="1.00" />
+    <add key="WorldQueue.Threshold.Medium" value="300" />
+    <add key="WorldQueue.Threshold.Long" value="900" />
+    <add key="WorldQueue.PollTimer" value ="120" />	
+
+    <!-- ENABLE TRANSFER -->
+    <add key="ShardTransfer.Enabled" value="true" />
+    <add key="ShardTransfer.ServiceURL" value="https://xfer.ddo.com/TurbineTransferService/TurbineTransferService.svc" />
+    <add key="ShardTransfer.StoreURL" value="http://d12.parature.com/ics/support/kbanswer.asp?deptID=24047&amp;task=knowledge&amp;questionID=6781" />	
+    <!-- END ENABLE TRANSFER -->
+	
+    <!-- Akamai Download Information -->		
+    <add key="URL.AkamaiDownloadURL" value="http://installer.ddo.com/dnd/"/>
+    <add key="Game.Version" value="5000.0050.3264.4021"/>
+
+  </appSettings>
+</configuration>
+ 

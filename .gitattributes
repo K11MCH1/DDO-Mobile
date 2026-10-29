@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.bat text eol=crlf
+*.jar binary
+*.p12 binary
+*.so binary

@@ -1,0 +1,21 @@
+#!/bin/bash
+# The game session inside the runtime: gamescope nested in the app's compositor, running ddo-run.
+#   ddo-session ARGS_FILE
+# The app sets DDO_WIDTH/DDO_HEIGHT (the session's output size), XDG_RUNTIME_DIR (where its compositor
+# listens), WAYLAND_DISPLAY, VK_ICD_FILENAMES and PULSE_SERVER before starting proot.
+set -u
+args=${1:?launch request}
+export HOME=/root LANG=${LANG:-C.UTF-8} XDG_SESSION_TYPE=wayland
+export BL_SYSV_DIR=${BL_SYSV_DIR:-/tmp/.ddo-sysv}
+mkdir -p "$BL_SYSV_DIR" /tmp/.X11-unix
+echo "== ddo-session $(date) runtime $(cat /etc/ddo-runtime-version 2>/dev/null) ${DDO_WIDTH}x${DDO_HEIGHT}"
+echo "== vulkan: ${VK_ICD_FILENAMES:-loader default}"
+
+# gamescope paints a cursor only for mice; the session is driven by touch, so keep it hidden unless asked.
+gs=(--backend wayland -W "$DDO_WIDTH" -H "$DDO_HEIGHT" -w "$DDO_WIDTH" -h "$DDO_HEIGHT" -f --xwayland-count 1)
+[ -n "${DDO_FPS:-}" ] && gs+=(-r "$DDO_FPS")
+[ "${DDO_CURSOR:-0}" = 1 ] || gs+=(--hide-cursor-delay 1)
+# shellcheck disable=SC2206
+[ -n "${DDO_GAMESCOPE_ARGS:-}" ] && gs+=($DDO_GAMESCOPE_ARGS)
+echo "== gamescope ${gs[*]}"
+exec gamescope "${gs[@]}" -- /usr/local/bin/ddo-run --args-file "$args"

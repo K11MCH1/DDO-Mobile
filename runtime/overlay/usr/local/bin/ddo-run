@@ -1,0 +1,111 @@
+#!/usr/bin/python3
+"""Starts Dungeons & Dragons Online under Proton, without the Steam client.
+
+    ddo-run --args-file PATH
+
+PATH is a JSON request the app writes just before the session starts:
+{"proton": "<Proton folder>", "prefix": "<compat data folder>", "dir": "<install folder>", "exe": "<client exe>",
+ "args": [...], "env": {...}, "prefs": "<UserPreferences.ini>"}
+The client's arguments carry the account's login ticket, so they travel in this file rather than on a command
+line, and the file is removed as soon as it is read.
+"""
+import json
+import os
+import sys
+
+
+def say(message):
+    print("ddo-run: %s" % message, file=sys.stderr, flush=True)
+
+
+def load(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            request = json.load(f)
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    if not isinstance(request, dict):
+        raise ValueError("not an object")
+    return request
+
+
+def fit_display(prefs):
+    """Gives the client the session's own output size, so gamescope shows it edge to edge."""
+    try:
+        width, height = int(os.environ["DDO_WIDTH"]), int(os.environ["DDO_HEIGHT"])
+    except (KeyError, ValueError):
+        return
+    if width <= 0 or height <= 0 or not os.path.isfile(prefs):
+        return
+    wanted = {"Resolution": "%dx%d" % (width, height), "WindowedResolution": str(width << 16 | height),
+              "FullScreen": "True"}
+    with open(prefs, encoding="utf-8", errors="replace") as f:
+        lines = f.read().splitlines()
+    out, section, seen = [], None, set()
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            if section == "Display":
+                out.extend("%s=%s" % (k, v) for k, v in wanted.items() if k not in seen)
+            section = stripped[1:-1]
+        elif section == "Display" and "=" in stripped and stripped.split("=", 1)[0] in wanted:
+            key = stripped.split("=", 1)[0]
+            seen.add(key)
+            line = "%s=%s" % (key, wanted[key])
+        out.append(line)
+    if section == "Display":
+        out.extend("%s=%s" % (k, v) for k, v in wanted.items() if k not in seen)
+    elif "Display" not in {l.strip()[1:-1] for l in lines if l.strip().startswith("[")}:
+        out += ["", "[Display]"] + ["%s=%s" % (k, v) for k, v in wanted.items()]
+    with open(prefs, "w", encoding="utf-8", newline="\r\n") as f:
+        f.write("\n".join(out) + "\n")
+    say("display set to %dx%d" % (width, height))
+
+
+def main(argv):
+    if len(argv) != 2 or argv[0] != "--args-file":
+        say("usage: ddo-run --args-file PATH")
+        return 2
+    try:
+        request = load(argv[1])
+    except (OSError, ValueError) as e:
+        say("could not read the launch request: %s" % e)
+        return 2
+    proton = os.path.join(request.get("proton") or "", "proton")
+    prefix = request.get("prefix") or ""
+    folder = request.get("dir") or ""
+    exe = request.get("exe") or ""
+    args = [str(a) for a in request.get("args") or []]
+    if not os.access(proton, os.X_OK):
+        say("Proton is not installed at %s" % os.path.dirname(proton))
+        return 2
+    if not os.path.isfile(exe) or not os.path.isdir(folder) or not prefix:
+        say("the game is not where the launcher expected it (%s)" % exe)
+        return 2
+    os.makedirs(prefix, exist_ok=True)
+    steam = os.path.join(os.environ.get("HOME", "/root"), ".local", "share", "Steam")
+    os.makedirs(steam, exist_ok=True)
+    env = dict(os.environ)
+    env.update({
+        "STEAM_COMPAT_DATA_PATH": prefix,
+        "STEAM_COMPAT_CLIENT_INSTALL_PATH": steam,
+        "STEAM_COMPAT_INSTALL_PATH": folder,
+        "STEAM_COMPAT_TOOL_PATHS": os.path.dirname(proton),
+        "STEAM_COMPAT_APP_ID": "0",
+        "SteamAppId": "0",
+        "SteamGameId": "0",
+        "PROTON_LOG_DIR": os.path.join(prefix, "logs"),
+    })
+    env.update({str(k): str(v) for k, v in (request.get("env") or {}).items()})
+    if request.get("prefs"):
+        fit_display(str(request["prefs"]))
+    say("starting %s with %s, %d arguments" % (os.path.basename(exe), os.path.basename(os.path.dirname(proton)), len(args)))
+    os.chdir(folder)
+    os.execve(proton, [proton, "waitforexitandrun", exe] + args, env)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
