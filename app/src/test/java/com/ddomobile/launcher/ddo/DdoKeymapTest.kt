@@ -30,6 +30,23 @@ class DdoKeymapTest {
     }
 
     @Test
+    fun aTapInteracts() {
+        val patched = DdoKeymap.patch(defaults)
+        assertTrue(patched.contains("Interact [ User [ 1 DIMOFS_BUTTON0 ] 0x00000000 Tap ]"))
+        assertFalse(patched.contains("Invalid [ Old [ 1 DIMOFS_BUTTON0 ] 0x00000000 Tap ]"))
+        // The press itself still selects.
+        assertTrue(patched.contains("SelectLeft [ Old [ 1 DIMOFS_BUTTON0 ] ]"))
+        // As the game saves it for the classic preset, the left tap is the right button's interact.
+        val saved = defaults.replace("Invalid [ Old [ 1 DIMOFS_BUTTON0 ] 0x00000000 Tap ]",
+            "ClassicInteractTap [ Old [ 1 DIMOFS_BUTTON0 ] 0x00000000 Tap ]")
+        val resaved = DdoKeymap.patch(saved)
+        assertTrue(resaved.contains("Interact [ User [ 1 DIMOFS_BUTTON0 ] 0x00000000 Tap ]"))
+        assertFalse(resaved.contains("ClassicInteractTap [ Old [ 1 DIMOFS_BUTTON0 ]"))
+        // The right button's own tap keeps it.
+        assertTrue(resaved.contains("ClassicInteractTap [ Old [ 1 DIMOFS_BUTTON1 ] 0x00000000 Tap ]"))
+    }
+
+    @Test
     fun patchingTwiceChangesNothing() {
         val once = DdoKeymap.patch(defaults)
         assertEquals(once, DdoKeymap.patch(once))

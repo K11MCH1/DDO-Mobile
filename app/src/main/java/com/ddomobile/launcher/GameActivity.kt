@@ -21,6 +21,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -67,6 +68,8 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
         val root = FrameLayout(this)
         surface = SurfaceView(this).also { it.holder.addCallback(this) }
         controls = TouchControls(this, this)
+        // The touch layer starts without the cursor; the compositor may still show it from an earlier screen.
+        Compositor.nativeSetCursorShown(false)
         typing = EditText(this).apply {
             alpha = 0f
             isSingleLine = true
@@ -167,9 +170,16 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
     override fun button(code: Int, pressed: Boolean) = Compositor.nativePointerButton(code, pressed)
     override fun key(code: Int, pressed: Boolean) = Compositor.nativeKey(code, pressed)
     override fun scroll(steps: Float) = Compositor.nativePointerAxis(steps, 0f)
+    override fun cursorShown(shown: Boolean) = Compositor.nativeSetCursorShown(shown)
 
+    /** Opens the soft keyboard, or closes it when it is already up. */
     override fun keyboard() {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        if (ViewCompat.getRootWindowInsets(window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true) {
+            imm.hideSoftInputFromWindow(typing.windowToken, 0)
+            typing.clearFocus()
+            return
+        }
         typing.requestFocus()
         imm.showSoftInput(typing, InputMethodManager.SHOW_FORCED)
     }

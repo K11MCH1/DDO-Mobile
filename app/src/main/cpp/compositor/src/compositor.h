@@ -49,3 +49,5 @@ void compositor_post(int type, int a, int b, float x, float y);
 void compositor_resize(int width, int height);
 float compositor_fps(void);
 int compositor_has_client_surface(void);
+/* Draws the client's cursor; off by default, since touch points by itself. */
+void compositor_set_cursor_shown(int shown);

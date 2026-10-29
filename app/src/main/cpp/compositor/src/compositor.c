@@ -93,6 +93,7 @@ static atomic_int g_running;
 static int g_pipe[2] = {-1, -1};
 static atomic_int g_output_w = 1920, g_output_h = 1080;
 static atomic_int g_has_toplevel, g_fps_milli;
+static atomic_int g_cursor_shown;
 
 static struct wl_display *g_display;
 static int g_stopping;
@@ -886,7 +887,10 @@ static void add_tree(struct draw_list *dl, struct surface *s, int ox, int oy, in
         if (!c->below_parent) add_tree(dl, c, ox + c->sub_x, oy + c->sub_y, depth + 1);
 }
 
+void compositor_set_cursor_shown(int shown) { atomic_store(&g_cursor_shown, shown); }
+
 static int cursor_visible(void) {
+    if (!atomic_load(&g_cursor_shown)) return 0;
     if (!g_cursor_surface || !g_cursor_surface->has_content) return 0;
     if (g_active_constraint && g_active_constraint->is_lock) return 0;
     for (int i = 0; i < g_nptrs; i++) if (g_ptrs[i].focus) return 1;
@@ -1425,12 +1429,9 @@ static void pointer_input(double x, double y, int relative, uint32_t button, int
         dy = g_raw_valid ? y - g_raw_y : 0;
         g_raw_x = x; g_raw_y = y; g_raw_valid = 1;
     }
-    if (!(k && k->is_lock)) {
-        if (relative) {
-            x = g_ptr_x + dx;
-            y = g_ptr_y + dy;
-            clamp_to_scene(&x, &y);
-        }
+    /* Relative motion (the touch layer's camera drag) leaves the cursor where it is: until the game's grab arrived,
+       a drag used to pull the visible cursor along, and the game took that as a jump of the camera once it did. */
+    if (!relative && !(k && k->is_lock)) {
         if (k) confine_clamp(k, &x, &y);
         g_ptr_x = x;
         g_ptr_y = y;
@@ -1442,7 +1443,7 @@ static void pointer_input(double x, double y, int relative, uint32_t button, int
     const wl_fixed_t fx = wl_fixed_from_double(g_ptr_x), fy = wl_fixed_from_double(g_ptr_y);
     const uint32_t t = now_ms();
     pointer_focus(target->resource, fx, fy);
-    if (!(k && k->is_lock) && (!relative || dx != 0 || dy != 0))
+    if (!relative && !(k && k->is_lock))
         for_each_seat_resource_of(g_ptrs, g_nptrs, client, sp) wl_pointer_send_motion(sp->res, t, fx, fy);
     send_relative_motion(client, dx, dy);
     for_each_seat_resource_of(g_ptrs, g_nptrs, client, sp) {

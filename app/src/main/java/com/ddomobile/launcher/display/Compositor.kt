@@ -27,6 +27,8 @@ object Compositor {
     external fun nativePointerAxis(vertical: Float, horizontal: Float)
     external fun nativeKey(code: Int, pressed: Boolean)
     external fun nativeTouch(id: Int, action: Int, x: Float, y: Float)
+    /** Draws the client's cursor; hidden by default, since a touch points by itself. */
+    external fun nativeSetCursorShown(shown: Boolean)
 
     /** Frames shown in the last second, for the overlay. */
     external fun nativeFramesPerSecond(): Float

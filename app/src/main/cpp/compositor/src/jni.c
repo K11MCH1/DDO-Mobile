@@ -92,6 +92,10 @@ JNIEXPORT void JNICALL JNI_FN(nativeTouch)(JNIEnv *env, jobject thiz, jint id, j
     compositor_post(MSG_TOUCH, id, action, x, y);
 }
 
+JNIEXPORT void JNICALL JNI_FN(nativeSetCursorShown)(JNIEnv *env, jobject thiz, jboolean shown) {
+    compositor_set_cursor_shown(shown ? 1 : 0);
+}
+
 JNIEXPORT jfloat JNICALL JNI_FN(nativeFramesPerSecond)(JNIEnv *env, jobject thiz) { return compositor_fps(); }
 
 JNIEXPORT jboolean JNICALL JNI_FN(nativeHasClientSurface)(JNIEnv *env, jobject thiz) {
