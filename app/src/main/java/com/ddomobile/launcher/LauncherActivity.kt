@@ -112,6 +112,7 @@ class LauncherActivity : ComponentActivity() {
     private var highRes by mutableStateOf(true)
     private var hud by mutableStateOf(false)
     private var fastCpu by mutableStateOf(true)
+    private var diagnostics by mutableStateOf(false)
 
     private val pickDriver = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(::importDriver) }
 
@@ -129,6 +130,7 @@ class LauncherActivity : ComponentActivity() {
         highRes = DdoSettings.highRes(this)
         hud = DdoSettings.showHud(this)
         fastCpu = DdoSettings.fastCpu(this)
+        diagnostics = DdoSettings.diagnostics(this)
         setContent { DdoTheme { Screen() } }
         loadWorlds()
     }
@@ -437,7 +439,10 @@ class LauncherActivity : ComponentActivity() {
             OutlinedButton(::testLaunch, enabled = ready && !playing, modifier = Modifier.fillMaxWidth()) {
                 Text("Test launch (no sign-in)")
             }
-            Text("Logs: ${Paths(this@LauncherActivity).logs.absolutePath}", color = DdoColors.TextDim, fontSize = 11.sp)
+            Toggle("Performance diagnostics (FEX statistics in the session log)", diagnostics) {
+                diagnostics = it; DdoSettings.setDiagnostics(this, it)
+            }
+            Text("Logs:${Paths(this@LauncherActivity).logs.absolutePath}", color = DdoColors.TextDim, fontSize = 11.sp)
         }
     }
 

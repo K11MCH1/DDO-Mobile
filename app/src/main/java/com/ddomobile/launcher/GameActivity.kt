@@ -29,6 +29,9 @@ import com.ddomobile.launcher.input.Keys
 import com.ddomobile.launcher.input.TouchControls
 import com.ddomobile.launcher.session.GameSession
 
+/** Highest panel refresh the game asks for: past this the rate only costs battery. */
+private const val MAX_REFRESH_HZ = 120f
+
 /** The game on screen: the compositor's surface, DDO's touch layer, and keyboard / mouse pass-through. */
 class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
     private lateinit var surface: SurfaceView
@@ -40,12 +43,28 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
     private var outHeight = 1
     private var watching = true
 
+    /**
+     * The panel's fastest mode up to 120 Hz at the current resolution. Left alone, Android drops the panel to 60 Hz
+     * whenever it judges the content slow, and gamescope then paces the game to that.
+     */
+    private fun fastestDisplayMode(): Int? {
+        @Suppress("DEPRECATION")
+        val display = windowManager.defaultDisplay ?: return null
+        val current = display.mode
+        return display.supportedModes
+            .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
+            .filter { it.refreshRate <= MAX_REFRESH_HZ + 1 }
+            .maxByOrNull { it.refreshRate }
+            ?.modeId
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.attributes = window.attributes.apply {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            fastestDisplayMode()?.let { preferredDisplayModeId = it }
         }
 
         val root = FrameLayout(this)

@@ -53,7 +53,12 @@ src=$work/FEX
 if [ ! -d "$src/.git" ]; then
   git clone -q --filter=blob:none --no-checkout https://github.com/FEX-Emu/FEX.git "$src"
 fi
+# The patches are LF; a global core.autocrlf would otherwise leave a CRLF tree they no longer apply to.
+git -C "$src" config core.autocrlf false
+git -C "$src" am --abort >/dev/null 2>&1 || true
+rm -rf "$src/.git/rebase-apply"
 git -C "$src" -c advice.detachedHead=false checkout -q -f "$fex_commit"
+git -C "$src" rm -q -r --cached . >/dev/null
 git -C "$src" reset -q --hard "$fex_commit"
 git -C "$src" submodule update -q --init --force --depth 1 --jobs 6
 git -C "$src/External/rpmalloc" checkout -q -- .

@@ -82,6 +82,10 @@ object DdoSettings {
     fun fastCpu(context: Context): Boolean = prefs(context).getBoolean("fastCpu", true)
     fun setFastCpu(context: Context, value: Boolean) = prefs(context).edit().putBoolean("fastCpu", value).apply()
 
+    /** Our FEX build's counters (runtime/fex: invalidations, cache loads, compiles, clears), logged every 5 s. */
+    fun diagnostics(context: Context): Boolean = prefs(context).getBoolean("diagnostics", false)
+    fun setDiagnostics(context: Context, value: Boolean) = prefs(context).edit().putBoolean("diagnostics", value).apply()
+
     fun showHud(context: Context): Boolean = prefs(context).getBoolean("hud", false)
     fun setShowHud(context: Context, value: Boolean) = prefs(context).edit().putBoolean("hud", value).apply()
 }

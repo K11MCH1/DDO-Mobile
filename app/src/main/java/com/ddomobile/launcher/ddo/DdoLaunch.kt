@@ -89,6 +89,11 @@ object DdoLaunch {
             env.put("FEX_TSOENABLED", "0")
             env.put("FEX_HALFBARRIERTSOENABLED", "0")
         }
+        if (DdoSettings.diagnostics(context)) {
+            // Our FEX build's counters; FEX only logs at all with SilentLog off.
+            env.put("DDO_FEX_DIAG", "1")
+            env.put("FEX_SILENTLOG", "0")
+        }
         if (DdoSettings.renderer(context) == DdoRenderer.OPENGL) env.put("MESA_LOADER_DRIVER_OVERRIDE", "zink")
         val request = JSONObject()
             .put("proton", proton)
