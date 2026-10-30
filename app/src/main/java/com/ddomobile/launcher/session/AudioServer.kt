@@ -25,7 +25,8 @@ class AudioServer(private val context: Context) {
         File(dir, "default.pa").writeText(
             listOf(
                 "load-module module-native-protocol-unix auth-anonymous=1 auth-cookie-enabled=0 socket=\"${socket.path}\"",
-                "load-module module-aaudio-classic-sink sink_name=AAudio",
+                // Without a volume the sink starts silent, and every stream starts at the sink's level.
+                "load-module module-aaudio-classic-sink sink_name=AAudio volume=1.0",
                 "set-default-sink AAudio",
             ).joinToString("\n", postfix = "\n")
         )
