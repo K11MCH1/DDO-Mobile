@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -57,6 +59,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -318,11 +322,14 @@ class LauncherActivity : ComponentActivity() {
                 }
             }
             Column(
-                Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 18.dp, vertical = 20.dp),
+                Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Column(Modifier.widthIn(max = 760.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Header()
+                Header()
+                Column(
+                    Modifier.padding(horizontal = 18.dp).padding(top = 16.dp).widthIn(max = 760.dp).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
                     TabBar(TABS, tab) { t ->
                         tab = t
                         loadTab()
@@ -345,12 +352,17 @@ class LauncherActivity : ComponentActivity() {
     @Composable
     private fun Header() {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("DUNGEONS & DRAGONS", color = DdoColors.Gold, fontSize = 26.sp, fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Serif, letterSpacing = 2.sp)
-            Text("ONLINE", color = DdoColors.Ember, fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Serif,
-                letterSpacing = 6.sp)
-            Spacer(Modifier.height(4.dp))
-            Text("DDO Mobile", color = DdoColors.TextDim, fontSize = 12.sp)
+            val logo = painterResource(R.drawable.ddo_logo)
+            // Nearly edge to edge; on a wide screen it stops growing, or it would fill a landscape screen alone.
+            Image(logo, contentDescription = "Dungeons & Dragons Online", contentScale = ContentScale.Fit,
+                modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 10.dp).widthIn(max = 520.dp).fillMaxWidth(0.95f)
+                    .aspectRatio(logo.intrinsicSize.width / logo.intrinsicSize.height))
+            Spacer(Modifier.height(8.dp))
+            // MOBILE's letters as tall as the logo's ONLINE (38 of its 600 px): the cropped wordmark is 37% of the logo's width.
+            val wordmark = painterResource(R.drawable.mobile_wordmark)
+            Image(wordmark, contentDescription = "Mobile", contentScale = ContentScale.Fit,
+                modifier = Modifier.padding(horizontal = 10.dp).widthIn(max = 520.dp).fillMaxWidth(0.95f * 0.37f)
+                    .aspectRatio(wordmark.intrinsicSize.width / wordmark.intrinsicSize.height))
         }
     }
 
