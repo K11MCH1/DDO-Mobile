@@ -62,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -92,6 +93,7 @@ import com.ddomobile.launcher.ui.NewsFeed
 import com.ddomobile.launcher.ui.Panel
 import com.ddomobile.launcher.ui.ProtonModel
 import com.ddomobile.launcher.ui.ProtonTab
+import com.ddomobile.launcher.ui.SelectAllTextField
 import com.ddomobile.launcher.ui.TabBar
 import com.ddomobile.launcher.ui.Toggle
 import com.ddomobile.launcher.ui.ddoChipColors
@@ -343,7 +345,9 @@ class LauncherActivity : ComponentActivity() {
             }
             // On a screen tall enough, the Play tab stays put and the news takes the room under the login, scrolling
             // inside its section; on a shorter one (a phone held sideways) the page scrolls, or LOGIN could be cut off.
-            val pinned = tab == PLAY && maxHeight >= 760.dp
+            // The screen's height decides, not the room left: the keyboard shrinks that, and switching to a scrolling
+            // page under a focused text field broke Compose's focus ("ActiveParent with no focused child").
+            val pinned = tab == PLAY && LocalConfiguration.current.screenHeightDp >= 760
             Column(
                 Modifier.fillMaxSize().then(if (pinned) Modifier else Modifier.verticalScroll(scroll)).padding(bottom = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -401,13 +405,11 @@ class LauncherActivity : ComponentActivity() {
         val session by GameSession.state.collectAsState()
         val running = session is GameSession.State.Running
         Panel(null, modifier) {
-            OutlinedTextField(username, { username = it }, label = { Text("Username") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
-                modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(password, { password = it }, label = { Text("Password") }, singleLine = true,
+            SelectAllTextField(username, { username = it }, "Username", Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next))
+            SelectAllTextField(password, { password = it }, "Password", Modifier.fillMaxWidth(),
                 visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                modifier = Modifier.fillMaxWidth())
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(remember, { remember = it })
                 Text("Remember password (stored encrypted on this phone)", color = DdoColors.TextDim, fontSize = 13.sp)
