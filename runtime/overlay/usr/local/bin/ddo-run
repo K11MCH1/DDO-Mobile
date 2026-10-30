@@ -114,6 +114,10 @@ def big_cores():
         held_back = any(hw[o] < hw[c] and hw[o] > slowest and cap[o] > cap[c] for o in hw)
         if not held_back:
             chosen.append(c)
+    if len(chosen) < 4:
+        # A phone without a little cluster - the RedMagic 11 Pro has six 3.6 GHz cores and two 4.6 GHz - would leave the
+        # game, Wine and DXVK two cores between them. Every core then, the fastest first as Windows numbers them.
+        chosen = sorted(hw, key=lambda c: (-hw[c], c))
     return chosen
 
 
