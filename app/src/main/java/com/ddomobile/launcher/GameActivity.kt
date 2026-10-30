@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
+import android.view.Display
 import android.view.Gravity
 import android.view.InputDevice
 import android.view.KeyCharacterMap
@@ -46,14 +47,13 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
      * alone, Android drops the panel to 60 Hz whenever it judges the content slow, and gamescope then paces the game
      * to that.
      */
-    private fun fastestDisplayMode(): Int? {
+    private fun fastestDisplayMode(): Display.Mode? {
         @Suppress("DEPRECATION")
         val display = windowManager.defaultDisplay ?: return null
         val current = display.mode
         return display.supportedModes
             .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
             .maxByOrNull { it.refreshRate }
-            ?.modeId
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,7 +62,10 @@ class GameActivity : Activity(), SurfaceHolder.Callback, TouchControls.Sink {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.attributes = window.attributes.apply {
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-            fastestDisplayMode()?.let { preferredDisplayModeId = it }
+            fastestDisplayMode()?.let { mode ->
+                preferredDisplayModeId = mode.modeId
+                Compositor.nativeSetMaxRefresh(Math.round(mode.refreshRate))
+            }
         }
 
         val root = FrameLayout(this)

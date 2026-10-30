@@ -96,6 +96,10 @@ JNIEXPORT void JNICALL JNI_FN(nativeSetCursorShown)(JNIEnv *env, jobject thiz, j
     compositor_set_cursor_shown(shown ? 1 : 0);
 }
 
+JNIEXPORT void JNICALL JNI_FN(nativeSetMaxRefresh)(JNIEnv *env, jobject thiz, jint hz) {
+    compositor_set_max_refresh(hz);
+}
+
 JNIEXPORT jfloat JNICALL JNI_FN(nativeFramesPerSecond)(JNIEnv *env, jobject thiz) { return compositor_fps(); }
 
 JNIEXPORT jboolean JNICALL JNI_FN(nativeHasClientSurface)(JNIEnv *env, jobject thiz) {

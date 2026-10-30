@@ -29,6 +29,8 @@ object Compositor {
     external fun nativeTouch(id: Int, action: Int, x: Float, y: Float)
     /** Draws the client's cursor; hidden by default, since a touch points by itself. */
     external fun nativeSetCursorShown(shown: Boolean)
+    /** The panel's fastest display mode: the compositor tells the client no faster refresh than this. */
+    external fun nativeSetMaxRefresh(hz: Int)
 
     /** Frames shown in the last second, for the overlay. */
     external fun nativeFramesPerSecond(): Float

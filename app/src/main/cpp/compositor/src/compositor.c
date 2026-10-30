@@ -889,6 +889,10 @@ static void add_tree(struct draw_list *dl, struct surface *s, int ox, int oy, in
 
 void compositor_set_cursor_shown(int shown) { atomic_store(&g_cursor_shown, shown); }
 
+/* The panel's fastest display mode, in Hz; 0 while unknown. */
+static atomic_int g_max_refresh_hz;
+void compositor_set_max_refresh(int hz) { atomic_store(&g_max_refresh_hz, hz); }
+
 static int cursor_visible(void) {
     if (!atomic_load(&g_cursor_shown)) return 0;
     if (!g_cursor_surface || !g_cursor_surface->has_content) return 0;
@@ -1685,7 +1689,11 @@ static int on_stats_timer(void *data) {
            whenever it can - the notification shade, for one - and each new rate made gamescope and the game rebuild
            their presentation, which flashed black. Frames keep following the panel's real vsync either way. */
         const int hz = panel_rate_hz(g_min_interval_ns);
-        if (hz * 1000 <= g_refresh_mhz) {
+        /* Vsync timestamps jitter: on the RedMagic 11 Pro a 4.2 ms gap once passed for 240 Hz on a 144 Hz panel, and
+           gamescope paced for a screen that wasn't there until no frame came through at all. No rate above the
+           panel's fastest mode is believed. */
+        const int max = atomic_load(&g_max_refresh_hz);
+        if (hz * 1000 <= g_refresh_mhz || (max > 0 && hz > max)) {
             g_refresh_candidate_hz = 0;
         } else if (hz != g_refresh_candidate_hz) {
             g_refresh_candidate_hz = hz;

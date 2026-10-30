@@ -51,3 +51,5 @@ float compositor_fps(void);
 int compositor_has_client_surface(void);
 /* Draws the client's cursor; off by default, since touch points by itself. */
 void compositor_set_cursor_shown(int shown);
+/* The panel's fastest display mode in Hz: no measured rate above it is announced to the client. */
+void compositor_set_max_refresh(int hz);
