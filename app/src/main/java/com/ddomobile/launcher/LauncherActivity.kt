@@ -6,15 +6,20 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.util.DisplayMetrics
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,18 +41,19 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +64,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.ddomobile.launcher.core.ChildProcessLimit
 import com.ddomobile.launcher.ddo.DdoGls
 import com.ddomobile.launcher.ddo.DdoLaunch
@@ -70,10 +77,19 @@ import com.ddomobile.launcher.runtime.Paths
 import com.ddomobile.launcher.runtime.ProtonStore
 import com.ddomobile.launcher.runtime.RuntimeStore
 import com.ddomobile.launcher.session.GameSession
+import com.ddomobile.launcher.ui.ComponentsModel
+import com.ddomobile.launcher.ui.ComponentsTab
 import com.ddomobile.launcher.ui.DdoColors
 import com.ddomobile.launcher.ui.DdoTheme
+import com.ddomobile.launcher.ui.Panel
+import com.ddomobile.launcher.ui.ProtonModel
+import com.ddomobile.launcher.ui.ProtonTab
+import com.ddomobile.launcher.ui.TabBar
+import com.ddomobile.launcher.ui.Toggle
+import com.ddomobile.launcher.ui.ddoChipColors
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.launch
 
 class LauncherActivity : ComponentActivity() {
     private val ui = Handler(Looper.getMainLooper())
@@ -111,10 +127,34 @@ class LauncherActivity : ComponentActivity() {
     private var fps by mutableIntStateOf(60)
     private var highRes by mutableStateOf(true)
     private var hud by mutableStateOf(false)
-    private var fastCpu by mutableStateOf(true)
     private var diagnostics by mutableStateOf(false)
 
+    private var tab by mutableIntStateOf(0)
+    private val components: ComponentsModel by lazy {
+        ComponentsModel(this).also { m ->
+            m.pickWcp = { pickWcp.launch(arrayOf("*/*")) }
+            m.pickDriver = { pickComponentDriver.launch(arrayOf("application/zip", "application/octet-stream")) }
+        }
+    }
+    private val protonTab: ProtonModel by lazy { ProtonModel(this) }
+
     private val pickDriver = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(::importDriver) }
+    private val pickWcp = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { copyPicked(it, "import-component.wcp") }?.let { (file, name) -> components.importWcp(file, name) }
+    }
+    private val pickComponentDriver = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { copyPicked(it, "import-driver-zip.zip") }?.let { (file, _) -> components.importDriver(file) }
+    }
+
+    /** A picked document copied into the cache, with its display name. */
+    private fun copyPicked(uri: Uri, cacheName: String): Pair<File, String>? = runCatching {
+        val name = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        } ?: cacheName
+        val copy = File(cacheDir, cacheName)
+        contentResolver.openInputStream(uri)?.use { input -> copy.outputStream().use { input.copyTo(it) } } ?: return null
+        copy to name
+    }.getOrNull()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -129,7 +169,6 @@ class LauncherActivity : ComponentActivity() {
         fps = DdoSettings.frameLimit(this)
         highRes = DdoSettings.highRes(this)
         hud = DdoSettings.showHud(this)
-        fastCpu = DdoSettings.fastCpu(this)
         diagnostics = DdoSettings.diagnostics(this)
         setContent { DdoTheme { Screen() } }
         loadWorlds()
@@ -138,7 +177,16 @@ class LauncherActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refresh()
+        loadTab()
         if (GameSession.running) startActivity(Intent(this, GameActivity::class.java))
+    }
+
+    /** The Components and Proton tabs read their stores when they open. */
+    private fun loadTab() {
+        when (tab) {
+            COMPONENTS -> components.load()
+            PROTON -> protonTab.load()
+        }
     }
 
     private fun refresh() {
@@ -257,17 +305,38 @@ class LauncherActivity : ComponentActivity() {
 
     @Composable
     private fun Screen() {
-        Box(Modifier.fillMaxSize().background(DdoColors.Background).safeDrawingPadding()) {
+        val scroll = rememberScrollState()
+        BoxWithConstraints(Modifier.fillMaxSize().background(DdoColors.Background).safeDrawingPadding()) {
+            // The Components lists run long: past a screen's height down, a button goes back to the top.
+            val page = constraints.maxHeight
+            val scope = rememberCoroutineScope()
+            AnimatedVisibility(tab == COMPONENTS && scroll.value > page, Modifier.align(Alignment.BottomEnd).padding(20.dp).zIndex(1f),
+                enter = fadeIn(), exit = fadeOut()) {
+                FloatingActionButton({ scope.launch { scroll.animateScrollTo(0) } }, containerColor = DdoColors.PanelHigh,
+                    contentColor = DdoColors.Gold, modifier = Modifier.border(1.dp, DdoColors.GoldDim, RoundedCornerShape(16.dp))) {
+                    Text("↑", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                }
+            }
             Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 20.dp),
+                Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 18.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Column(Modifier.widthIn(max = 760.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Header()
-                    PlayPanel()
-                    SetupPanel()
-                    GraphicsPanel()
-                    ToolsPanel()
+                    TabBar(TABS, tab) { t ->
+                        tab = t
+                        loadTab()
+                    }
+                    when (tab) {
+                        GRAPHICS -> GraphicsPanel()
+                        COMPONENTS -> ComponentsTab(components)
+                        PROTON -> ProtonTab(protonTab)
+                        SETUP -> {
+                            SetupPanel()
+                            ToolsPanel()
+                        }
+                        else -> PlayPanel()
+                    }
                 }
             }
         }
@@ -286,22 +355,9 @@ class LauncherActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun Panel(title: String, content: @Composable () -> Unit) {
-        Column(
-            Modifier.fillMaxWidth()
-                .background(DdoColors.Panel, RoundedCornerShape(10.dp))
-                .border(1.dp, DdoColors.Line, RoundedCornerShape(10.dp))
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(title.uppercase(), color = DdoColors.Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp,
-                fontFamily = FontFamily.Serif)
-            content()
-        }
-    }
-
-    @Composable
     private fun PlayPanel() {
+        val session by GameSession.state.collectAsState()
+        val running = session is GameSession.State.Running
         Panel("Play") {
             OutlinedTextField(username, { username = it }, label = { Text("Username") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
@@ -334,13 +390,19 @@ class LauncherActivity : ComponentActivity() {
                     modifier = Modifier.weight(1f).height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = DdoColors.Ember, contentColor = DdoColors.Text)) {
                     if (playing) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = DdoColors.Text)
-                    else Text(if (GameSession.running) "RETURN TO GAME" else "PLAY", fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                    else Text(if (running) "RETURN TO GAME" else "PLAY", fontSize = 20.sp, fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Serif, letterSpacing = 3.sp)
                 }
                 if (playing) OutlinedButton({ cancel.set(true) }, Modifier.height(56.dp)) { Text("Cancel") }
             }
             playStatus?.let { Text(it, color = DdoColors.TextDim, fontSize = 13.sp) }
             playError?.let { Text(it, color = DdoColors.Ember, fontSize = 13.sp) }
+            if (!ready && busy == null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("DDO Mobile is not set up yet.", color = DdoColors.Ember, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    TextButton({ tab = SETUP }) { Text("Open Setup") }
+                }
+            }
         }
     }
 
@@ -398,33 +460,40 @@ class LauncherActivity : ComponentActivity() {
     private fun GraphicsPanel() {
         Panel("Graphics") {
             Text("Renderer", color = DdoColors.TextDim, fontSize = 13.sp)
-            DdoRenderer.entries.forEach { r ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(renderer == r, { renderer = r; DdoSettings.setRenderer(this@LauncherActivity, r) })
-                    Text(r.label, color = DdoColors.Text, fontSize = 14.sp)
+            var rendererOpen by remember { mutableStateOf(false) }
+            Box {
+                OutlinedButton({ rendererOpen = true }, Modifier.fillMaxWidth()) { Text("${renderer.label} ▾") }
+                DropdownMenu(rendererOpen, { rendererOpen = false }) {
+                    DdoRenderer.entries.forEach { r ->
+                        DropdownMenuItem(
+                            text = { Text(r.label, color = if (r == renderer) DdoColors.Gold else DdoColors.Text) },
+                            onClick = { renderer = r; DdoSettings.setRenderer(this@LauncherActivity, r); rendererOpen = false },
+                        )
+                    }
                 }
             }
             Text("Quality", color = DdoColors.TextDim, fontSize = 13.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DdoQuality.entries.forEach { q ->
-                    FilterChip(quality == q, { quality = q; DdoSettings.setQuality(this@LauncherActivity, q) }, label = { Text(q.label) })
+                    FilterChip(quality == q, { quality = q; DdoSettings.setQuality(this@LauncherActivity, q) }, label = { Text(q.label) }, colors = ddoChipColors())
                 }
             }
             Text("Render resolution", color = DdoColors.TextDim, fontSize = 13.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DdoSettings.RENDER_SCALES.forEach { s ->
-                    FilterChip(scale == s, { scale = s; DdoSettings.setRenderScale(this@LauncherActivity, s) }, label = { Text("$s%") })
+                    FilterChip(scale == s, { scale = s; DdoSettings.setRenderScale(this@LauncherActivity, s) }, label = { Text("$s%") }, colors = ddoChipColors())
                 }
             }
             Text("Frame limit", color = DdoColors.TextDim, fontSize = 13.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(30, 45, 60, 120).forEach { f ->
-                    FilterChip(fps == f, { fps = f; DdoSettings.setFrameLimit(this@LauncherActivity, f) }, label = { Text("$f") })
+                DdoSettings.FRAME_LIMITS.forEach { f ->
+                    FilterChip(fps == f, { fps = f; DdoSettings.setFrameLimit(this@LauncherActivity, f) },
+                        label = { Text(if (f == DdoSettings.FRAME_LIMIT_OFF) "Off" else "$f") }, colors = ddoChipColors())
                 }
             }
             Toggle("High-resolution textures", highRes) { highRes = it; DdoSettings.setHighRes(this, it) }
             Toggle("Performance overlay (DXVK)", hud) { hud = it; DdoSettings.setShowHud(this, it) }
-            Toggle("Fast CPU mode (turn off if the game hangs or crashes)", fastCpu) { fastCpu = it; DdoSettings.setFastCpu(this, it) }
+            Text("FEX speed settings are the FEX preset on the Proton tab.", color = DdoColors.TextDim, fontSize = 12.sp)
         }
     }
 
@@ -446,11 +515,11 @@ class LauncherActivity : ComponentActivity() {
         }
     }
 
-    @Composable
-    private fun Toggle(label: String, value: Boolean, onChange: (Boolean) -> Unit) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, color = DdoColors.Text, fontSize = 14.sp, modifier = Modifier.weight(1f))
-            Switch(value, onChange)
-        }
+    private companion object {
+        val TABS = listOf("Play", "Graphics", "Components", "Proton", "Setup")
+        const val GRAPHICS = 1
+        const val COMPONENTS = 2
+        const val PROTON = 3
+        const val SETUP = 4
     }
 }

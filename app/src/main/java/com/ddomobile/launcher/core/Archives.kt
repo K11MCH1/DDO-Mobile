@@ -17,7 +17,7 @@ object Archives {
         val total = archive.length().coerceAtLeast(1)
         val counted = CountingStream(BufferedInputStream(archive.inputStream(), 1 shl 16))
         val raw: InputStream = when {
-            archive.name.endsWith(".zst") -> ZstdInputStream(counted)
+            archive.name.endsWith(".zst") || archive.name.endsWith(".wcp") -> ZstdInputStream(counted)
             archive.name.endsWith(".gz") || archive.name.endsWith(".tgz") -> GZIPInputStream(counted, 1 shl 16)
             archive.name.endsWith(".xz") -> XZInputStream(counted)
             else -> counted

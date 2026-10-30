@@ -34,6 +34,13 @@ object GameSession {
 
     val running: Boolean get() = state.value is State.Running
 
+    /**
+     * The display driver the compositor loaded in this process ("" for the system one), or null before the first
+     * session: its Vulkan library stays loaded, so another choice needs the app to start again.
+     */
+    @Volatile var displayDriverLoaded: String? = null
+        private set
+
     /** [argsFile] is the guest path of ddo-run's request; [extraEnv] reaches every guest process. */
     @Synchronized
     fun start(context: Context, width: Int, height: Int, argsFile: String, extraEnv: Map<String, String>) {
@@ -63,6 +70,7 @@ object GameSession {
             mutableState.value = State.Ended(-1, log)
             return
         }
+        if (displayDriverLoaded == null) displayDriverLoaded = androidDriver.orEmpty()
 
         val audio = AudioServer(app).also { it.start(log) }
         this.audio = audio

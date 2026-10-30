@@ -69,18 +69,15 @@ object DdoSettings {
     fun renderScale(context: Context): Int = prefs(context).getInt("scale", 50).takeIf { it in RENDER_SCALES } ?: 50
     fun setRenderScale(context: Context, value: Int) = prefs(context).edit().putInt("scale", value).apply()
 
+    /** DDO's MaximumFrameRate one past its 120 cap, which the client runs without a limit (133 fps idle on the RedMagic). */
+    const val FRAME_LIMIT_OFF = 121
+    val FRAME_LIMITS = listOf(30, 45, 60, 120, FRAME_LIMIT_OFF)
+
     fun frameLimit(context: Context): Int = prefs(context).getInt("fps", 60)
     fun setFrameLimit(context: Context, value: Int) = prefs(context).edit().putInt("fps", value).apply()
 
     fun highRes(context: Context): Boolean = prefs(context).getBoolean("highres", true)
     fun setHighRes(context: Context, value: Boolean) = prefs(context).edit().putBoolean("highres", value).apply()
-
-    /**
-     * Fast CPU mode turns off FEX's emulation of x86 memory ordering (TSO): DDO's executable has no volatile
-     * metadata, so FEX would otherwise order every memory access. Safe mode keeps it, for if the game misbehaves.
-     */
-    fun fastCpu(context: Context): Boolean = prefs(context).getBoolean("fastCpu", true)
-    fun setFastCpu(context: Context, value: Boolean) = prefs(context).edit().putBoolean("fastCpu", value).apply()
 
     /** Our FEX build's counters (runtime/fex: invalidations, cache loads, compiles, clears), logged every 5 s. */
     fun diagnostics(context: Context): Boolean = prefs(context).getBoolean("diagnostics", false)

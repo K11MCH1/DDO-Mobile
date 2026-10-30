@@ -1,6 +1,7 @@
 package com.ddomobile.launcher.ddo
 
 import android.content.Context
+import com.ddomobile.launcher.components.ComponentStore
 import com.ddomobile.launcher.runtime.Paths
 import com.ddomobile.launcher.runtime.ProtonStore
 import java.io.File
@@ -77,24 +78,40 @@ object DdoLaunch {
         return Triple(paths, store.guestPath(proton), install)
     }
 
+    /**
+     * What DDO Mobile sets for the game before the Game environment edits, which the editor shows as defaults. The
+     * last four the session and ddo-run set too; listed here, an edit can replace or unset them for the game.
+     */
+    fun defaultEnvironment(context: Context): LinkedHashMap<String, String> {
+        val env = linkedMapOf<String, String>()
+        // Proton starts xalia (controller accessibility for Steam Deck) by default; DDO has no use for it.
+        env["PROTON_USE_XALIA"] = "0"
+        if (DdoSettings.showHud(context)) env["DXVK_HUD"] = "fps,frametimes,gpuload"
+        // FEX in Proton reads FEX_* settings from the environment; Proton's own config turns profiling stats on.
+        env["FEX_PROFILESTATS"] = "0"
+        env.putAll(ProtonOptions.fexPreset(context).env)
+        if (DdoSettings.diagnostics(context)) {
+            // Our FEX build's counters; FEX only logs at all with SilentLog off.
+            env["DDO_FEX_DIAG"] = "1"
+            env["FEX_SILENTLOG"] = "0"
+        }
+        if (DdoSettings.renderer(context) == DdoRenderer.OPENGL) env["MESA_LOADER_DRIVER_OVERRIDE"] = "zink"
+        env.putAll(ProtonOptions.wineSync(context).env)
+        if (ProtonOptions.forceSsbs(context)) env["DDO_FORCE_SSBS"] = "1"
+        env["TU_DEBUG"] = "sysmem"
+        env["tu_override_uncached_as_cache_coherent"] = "true"
+        env["vblank_mode"] = "0"
+        env["PULSE_LATENCY_MSEC"] = "60"
+        return env
+    }
+
     private fun write(context: Context, paths: Paths, proton: String, install: String, clientArgs: List<String>): String {
         writePreferences(context, prefsFile(paths))
         DdoKeymap.apply(context, paths.ddoHome)
-        // Proton starts xalia (controller accessibility for Steam Deck) by default; DDO has no use for it.
-        val env = JSONObject().put("PROTON_USE_XALIA", "0")
-        if (DdoSettings.showHud(context)) env.put("DXVK_HUD", "fps,frametimes,gpuload")
-        // FEX in Proton reads FEX_* settings from the environment; Proton's own config turns profiling stats on.
-        env.put("FEX_PROFILESTATS", "0")
-        if (DdoSettings.fastCpu(context)) {
-            env.put("FEX_TSOENABLED", "0")
-            env.put("FEX_HALFBARRIERTSOENABLED", "0")
-        }
-        if (DdoSettings.diagnostics(context)) {
-            // Our FEX build's counters; FEX only logs at all with SilentLog off.
-            env.put("DDO_FEX_DIAG", "1")
-            env.put("FEX_SILENTLOG", "0")
-        }
-        if (DdoSettings.renderer(context) == DdoRenderer.OPENGL) env.put("MESA_LOADER_DRIVER_OVERRIDE", "zink")
+        val env = JSONObject()
+        GameEnvironment.merge(defaultEnvironment(context), GameEnvironmentStore(context).edits())
+            .forEach { (k, v) -> env.put(k, v ?: JSONObject.NULL) }
+        val components = ComponentStore(context)
         val request = JSONObject()
             .put("proton", proton)
             .put("prefix", Paths.GUEST_PREFIX)
@@ -103,6 +120,7 @@ object DdoLaunch {
             .put("args", JSONArray(clientArgs + listOf("--prefs", "Z:" + PREFS.replace('/', '\\'))))
             .put("env", env)
             .put("prefs", PREFS)
+            .put("keepProtonFex", proton.substringAfterLast('/').let(components::keepsProtonFex))
         writePrivate(File(paths.ddoHome, "launch.json"), request.toString())
         return REQUEST
     }

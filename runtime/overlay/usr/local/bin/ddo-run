@@ -5,9 +5,10 @@
 
 PATH is a JSON request the app writes just before the session starts:
 {"proton": "<Proton folder>", "prefix": "<compat data folder>", "dir": "<install folder>", "exe": "<client exe>",
- "args": [...], "env": {...}, "prefs": "<UserPreferences.ini>"}
+ "args": [...], "env": {...}, "prefs": "<UserPreferences.ini>", "keepProtonFex": false}
 The client's arguments carry the account's login ticket, so they travel in this file rather than on a command
-line, and the file is removed as soon as it is read.
+line, and the file is removed as soon as it is read. An env value of null unsets the variable. keepProtonFex is
+set while the launcher's Components page has a FEX build of its own choice in the Proton.
 """
 import hashlib
 import json
@@ -18,6 +19,7 @@ import stat
 import sys
 
 FEX_BUILD = "/usr/local/lib/ddo-mobile/libarm64ecfex.dll"
+SSBS = "/usr/local/lib/libddossbs.so"
 # FEX stamps its version in more than one form, e.g. FEX-2610-30-g741e146 and FEX-2610e146.
 FEX_VERSION = re.compile(rb"FEX-\d{4}[0-9A-Za-z-]*")
 # Exported only by FEX with DroidDeck-Proton's patch series, which runtime/fex builds on.
@@ -121,6 +123,38 @@ def big_cores():
     return chosen
 
 
+def game_cores(spec):
+    """DDO_GAME_CORES, such as 0-4 or 0,2,6-7, as a list of the phone's cores; None when unset or unusable."""
+    if not spec:
+        return None
+    online = set(os.sched_getaffinity(0))
+    cores = []
+    try:
+        for part in spec.replace(" ", "").split(","):
+            first, _, last = part.partition("-")
+            for c in range(int(first), int(last or first) + 1):
+                if c in online and c not in cores:
+                    cores.append(c)
+    except ValueError:
+        cores = []
+    if not cores:
+        say("ignoring DDO_GAME_CORES=%s: no usable cores" % spec)
+        return None
+    return cores
+
+
+def force_ssbs(env, proton_dir):
+    """DDO_FORCE_SSBS=1: preload libddossbs.so, which sets PSTATE.SSBS again after each signal handler, as Wine's
+    signal returns keep clearing it (DroidDeck's Force SSBS). Only an ARM64 Proton has the aarch64 Wine it fixes."""
+    if env.get("DDO_FORCE_SSBS", "").lower() not in ("1", "on", "true", "yes"):
+        return
+    if not os.path.isfile(SSBS) or not os.path.isdir(os.path.join(proton_dir, "files", "lib", "wine", "aarch64-unix")):
+        say("Force SSBS needs an ARM64 Proton and %s; left off" % SSBS)
+        return
+    env["LD_PRELOAD"] = env["LD_PRELOAD"] + ":" + SSBS if env.get("LD_PRELOAD") else SSBS
+    say("Force SSBS on")
+
+
 def use_runtime_fex(proton_dir):
     """Puts the runtime's FEX (runtime/fex) in place of the Proton's own. That build is DroidDeck-Proton's FEX plus
     fixes for running under Wine, so it only goes into a Proton whose FEX is the same version with the same series;
@@ -212,7 +246,12 @@ def main(argv):
     if not os.path.isfile(exe) or not os.path.isdir(folder) or not prefix:
         say("the game is not where the launcher expected it (%s)" % exe)
         return 2
-    for tune in (use_runtime_fex, patch_ntdll_timer):
+    tunes = [patch_ntdll_timer]
+    if request.get("keepProtonFex"):
+        say("keeping the FEX chosen on the Components page")
+    else:
+        tunes.insert(0, use_runtime_fex)
+    for tune in tunes:
         try:
             tune(os.path.dirname(proton))
         except OSError as e:
@@ -241,15 +280,24 @@ def main(argv):
     if env.get("PROOT_FP_KEY") and os.path.isfile(audit):
         # Paired with the proot fast path for Proton's processes, as DroidDeck's Proton wrapper does.
         env["LD_AUDIT"] = audit + (":" + env["LD_AUDIT"] if env.get("LD_AUDIT") else "")
-    cores = big_cores()
+    requested = request.get("env") or {}
+    for k, v in requested.items():
+        if v is None:
+            env.pop(str(k), None)
+        else:
+            env[str(k)] = str(v)
+    cores = game_cores(env.get("DDO_GAME_CORES")) or big_cores()
     if cores:
-        env["WINE_CPU_TOPOLOGY"] = env["PROTON_CPU_TOPOLOGY"] = "%d:%s" % (len(cores), ",".join(map(str, cores)))
+        if "WINE_CPU_TOPOLOGY" not in requested:
+            env["WINE_CPU_TOPOLOGY"] = env["PROTON_CPU_TOPOLOGY"] = "%d:%s" % (len(cores), ",".join(map(str, cores)))
         try:
             os.sched_setaffinity(0, cores)
         except OSError as e:
             say("could not keep to cores %s: %s" % (cores, e))
         say("game cores %s" % ",".join(map(str, cores)))
-    env.update({str(k): str(v) for k, v in (request.get("env") or {}).items()})
+    force_ssbs(env, os.path.dirname(proton))
+    sync = [k for k in ("BL_SYNC", "BL_FSYNC", "PROTON_NO_NTSYNC", "PROTON_NO_FSYNC", "PROTON_NO_ESYNC") if env.get(k) == "1"]
+    say("sync: %s" % (", ".join(sync) or "Proton's default"))
     if request.get("prefs"):
         fit_display(str(request["prefs"]))
     say("starting %s with %s, %d arguments" % (os.path.basename(exe), os.path.basename(os.path.dirname(proton)), len(args)))
