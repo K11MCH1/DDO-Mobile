@@ -6,6 +6,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -132,9 +135,18 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
     private val longPress = Runnable {
         if (mousePointer >= 0 && gesture == Gesture.PENDING) {
             gesture = Gesture.LONG
+            // The cursor goes under the finger now, so the game knows what is there before a drag presses on it.
+            if (!trackpad) moveTo(downX, downY)
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
         }
     }
+
+    // Clicks are queued: the cursor moves, then after a beat the button goes down and up.
+    private val clicks = Handler(Looper.getMainLooper())
+    /** When the last queued click is done; the next starts no earlier. */
+    private var clicksFreeAt = 0L
+    /** A button a queued click has pressed and not yet released. */
+    private var clickHeld = -1
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         for (b in buttons) {
@@ -294,7 +306,6 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
             }
             Gesture.LONG -> if (moved) {
                 gesture = Gesture.DRAG
-                if (!trackpad) moveTo(downX, downY)
                 sink.button(Keys.BTN_LEFT, true)
                 if (trackpad) nudge(x - downX, y - downY) else moveTo(x, y)
                 lastX = x; lastY = y
@@ -347,11 +358,24 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
         gesture = Gesture.PENDING
     }
 
-    /** A click where the finger is, or where the cursor is in trackpad mode. */
+    /**
+     * A click where the finger is, or where the cursor is in trackpad mode. DDO finds the button or slot under the
+     * cursor when the cursor moves, a frame or so later: a press that came with the move landed on whatever was
+     * under the cursor before, so it took a second tap. The press now waits for the game to see the move, and the
+     * button stays down long enough for a frame to catch it. Clicks run one after another, in order.
+     */
     private fun click(button: Int, x: Float, y: Float) {
-        if (!trackpad) moveTo(x, y)
-        sink.button(button, true)
-        sink.button(button, false)
+        val start = maxOf(SystemClock.uptimeMillis(), clicksFreeAt)
+        val moves = !trackpad && (x != cursorX || y != cursorY)
+        if (moves) {
+            cursorX = x
+            cursorY = y
+            clicks.postAtTime({ sink.pointer(x, y) }, start)
+        }
+        val pressAt = start + if (moves) CLICK_HOVER_MS else 0L
+        clicks.postAtTime({ clickHeld = button; sink.button(button, true) }, pressAt)
+        clicks.postAtTime({ clickHeld = -1; sink.button(button, false) }, pressAt + CLICK_HOLD_MS)
+        clicksFreeAt = pressAt + CLICK_HOLD_MS
     }
 
     private fun moveTo(x: Float, y: Float) {
@@ -427,6 +451,12 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
     }
 
     fun releaseAll() {
+        clicks.removeCallbacksAndMessages(null)
+        clicksFreeAt = 0L
+        if (clickHeld >= 0) {
+            sink.button(clickHeld, false)
+            clickHeld = -1
+        }
         for (b in buttons) if (b.pointer >= 0) {
             b.pointer = -1
             if (b.code >= 0) sink.key(b.code, false)
@@ -459,5 +489,8 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
         private const val TWO_FINGER_TAP_MS = 300L
         private const val CAMERA_SPEED = 1.0f
         private const val TRACKPAD_SPEED = 1.0f
+        /** From a click's cursor move to its press: two frames at 60 fps, and some. */
+        private const val CLICK_HOVER_MS = 50L
+        private const val CLICK_HOLD_MS = 50L
     }
 }
