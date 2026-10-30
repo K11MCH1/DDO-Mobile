@@ -2,6 +2,8 @@ package com.ddomobile.launcher.session
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import com.ddomobile.launcher.display.Compositor
 import com.ddomobile.launcher.runtime.DriverStore
@@ -10,6 +12,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
  */
 object GameSession {
     private const val TAG = "GameSession"
+    private const val STOP_GRACE_S = 3L
 
     sealed interface State {
         data object Idle : State
@@ -31,6 +35,7 @@ object GameSession {
 
     @Volatile private var process: Process? = null
     @Volatile private var audio: AudioServer? = null
+    @Volatile private var quitting = false
 
     val running: Boolean get() = state.value is State.Running
 
@@ -116,6 +121,7 @@ object GameSession {
             return
         }
         process = proc
+        quitting = false
         GameService.start(app)
         mutableState.value = State.Running(width, height, log)
         Thread({
@@ -125,12 +131,40 @@ object GameSession {
             audio.stop()
             Compositor.nativeStop()
             GameService.stop(app)
-            mutableState.value = State.Ended(code, log)
+            // A quit asked for goes straight back to the launcher; anything else says how the game ended.
+            mutableState.value = if (quitting) State.Idle else State.Ended(code, log)
         }, "ddo-session-wait").start()
     }
 
+    /**
+     * Ends the session. proot ignores SIGTERM; on SIGQUIT it kills every process it traces, those that left their
+     * parent included, and exits. Should it not, it is killed after a few seconds and what it left is swept.
+     */
     fun stop() {
-        process?.destroy()
+        val proc = process ?: return
+        quitting = true
+        val pid = pidOf(proc)
+        if (pid > 0) android.os.Process.sendSignal(pid, OsConstants.SIGQUIT)
+        Thread({
+            if (runCatching { proc.waitFor(STOP_GRACE_S, TimeUnit.SECONDS) }.getOrDefault(false)) return@Thread
+            Log.w(TAG, "proot did not exit on SIGQUIT; killing the session")
+            proc.destroyForcibly()
+            sweep()
+        }, "ddo-session-stop").start()
+    }
+
+    private fun pidOf(process: Process): Int = runCatching {
+        process.javaClass.getDeclaredField("pid").apply { isAccessible = true }.getInt(process)
+    }.getOrDefault(-1)
+
+    /** Kills what is left of the guest: every process of the app's uid but the app itself. */
+    private fun sweep() {
+        val me = android.os.Process.myPid()
+        val uid = android.os.Process.myUid()
+        File("/proc").listFiles()?.forEach { dir ->
+            val pid = dir.name.toIntOrNull()?.takeIf { it != me } ?: return@forEach
+            if (runCatching { Os.stat(dir.path).st_uid }.getOrNull() == uid) android.os.Process.killProcess(pid)
+        }
     }
 
     fun acknowledgeEnd() {
