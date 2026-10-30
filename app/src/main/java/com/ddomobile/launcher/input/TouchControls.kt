@@ -26,6 +26,8 @@ import kotlin.math.min
  * - The lower left walks: once a finger there moves, a floating stick appears under it (W/S forward and back, A/D
  *   strafe). A finger that lifts there without moving is a tap like anywhere else.
  * - Buttons press keys: Attack (bound to K), Jump, Target, Run, menus.
+ * - Sliding a thumb on Attack turns the camera as a drag on the free screen does, while the attack stays held:
+ *   aiming as it swings.
  * - Cursor, at the left edge, shows the game's cursor and turns the free screen into a trackpad: a drag moves the
  *   cursor by the finger's movement and taps click where the cursor is. It is filled while on.
  */
@@ -49,6 +51,7 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
 
     private class Button(
         val label: String, val x: Float, val y: Float, val sizeDp: Float, val code: Int, val toggle: Boolean = false,
+        val steers: Boolean = false,
     ) {
         var cx = 0f
         var cy = 0f
@@ -59,7 +62,7 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
 
     private val density = resources.displayMetrics.density
     private val buttons = listOf(
-        Button("Attack", 0.90f, 0.72f, 84f, Keys.K),
+        Button("Attack", 0.90f, 0.72f, 84f, Keys.K, steers = true),
         Button("Jump", 0.78f, 0.88f, 56f, Keys.SPACE),
         Button("Target", 0.96f, 0.47f, 44f, Keys.TAB),
         Button("Cursor", 0.00f, 0.50f, 48f, CURSOR, toggle = true),
@@ -98,6 +101,16 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
     private var knobX = 0f
     private var knobY = 0f
     private val stickHeld = mutableSetOf<Int>()
+
+    // The finger on Attack, steering the camera once it slides.
+    private var aimPointer = -1
+    private var aimActive = false
+    private var aimDownX = 0f
+    private var aimDownY = 0f
+    private var aimLastX = 0f
+    private var aimLastY = 0f
+    /** Fingers holding the right button to steer: a drag and a thumb on Attack can do it at once. */
+    private var steerHolds = 0
 
     // The free screen: one finger is the mouse, a second one makes a two-finger tap or a pinch.
     private enum class Gesture { PENDING, CAMERA, TRACK, LONG, DRAG, PINCH }
@@ -179,6 +192,11 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
                 CURSOR -> setTrackpad(!b.on)
                 else -> sink.key(b.code, true)
             }
+            if (b.steers) {
+                aimPointer = id
+                aimActive = false
+                aimDownX = x; aimDownY = y; aimLastX = x; aimLastY = y
+            }
             invalidate()
             return
         }
@@ -211,6 +229,17 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
     }
 
     private fun move(id: Int, x: Float, y: Float, e: MotionEvent) {
+        if (id == aimPointer) {
+            if (!aimActive) {
+                if (hypot(x - aimDownX, y - aimDownY) <= DRAG_SLOP_DP * density) return
+                aimActive = true
+                steer(true)
+            } else {
+                sink.relative((x - aimLastX) * CAMERA_SPEED, (y - aimLastY) * CAMERA_SPEED)
+            }
+            aimLastX = x; aimLastY = y
+            return
+        }
         if (id == stickPointer) {
             val r = STICK_RADIUS_DP * density
             val dx = x - stickX
@@ -251,7 +280,7 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
                     gesture = Gesture.TRACK
                 } else {
                     gesture = Gesture.CAMERA
-                    sink.button(Keys.BTN_RIGHT, true)
+                    steer(true)
                 }
                 lastX = x; lastY = y
             }
@@ -282,6 +311,7 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
         buttons.firstOrNull { it.pointer == id }?.let { b ->
             b.pointer = -1
             if (b.code >= 0) sink.key(b.code, false)
+            if (id == aimPointer) endAim()
             invalidate()
             return
         }
@@ -346,10 +376,26 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
     private fun endMouseGesture() {
         removeCallbacks(longPress)
         when (gesture) {
-            Gesture.CAMERA -> sink.button(Keys.BTN_RIGHT, false)
+            Gesture.CAMERA -> steer(false)
             Gesture.DRAG -> sink.button(Keys.BTN_LEFT, false)
             else -> {}
         }
+    }
+
+    private fun steer(on: Boolean) {
+        if (on) {
+            if (steerHolds++ == 0) sink.button(Keys.BTN_RIGHT, true)
+        } else if (steerHolds > 0 && --steerHolds == 0) {
+            sink.button(Keys.BTN_RIGHT, false)
+        }
+    }
+
+    private fun endAim() {
+        if (aimActive) {
+            aimActive = false
+            steer(false)
+        }
+        aimPointer = -1
     }
 
     /** Eight sectors around the stick; a diagonal holds both of its keys. */
@@ -385,11 +431,16 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
             b.pointer = -1
             if (b.code >= 0) sink.key(b.code, false)
         }
+        endAim()
         if (stickPointer >= 0) {
             stickPointer = -1
             if (stickActive) { stickActive = false; updateStick(0f, 0f, 0f) }
         }
         if (mousePointer >= 0) endMouseGesture()
+        if (steerHolds > 0) {
+            steerHolds = 0
+            sink.button(Keys.BTN_RIGHT, false)
+        }
         mousePointer = -1
         pinchPointer = -1
         gesture = Gesture.PENDING
