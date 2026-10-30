@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -44,6 +45,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -72,6 +74,7 @@ import androidx.compose.ui.zIndex
 import com.ddomobile.launcher.core.ChildProcessLimit
 import com.ddomobile.launcher.ddo.DdoGls
 import com.ddomobile.launcher.ddo.DdoLaunch
+import com.ddomobile.launcher.ddo.DdoNews
 import com.ddomobile.launcher.ddo.DdoQuality
 import com.ddomobile.launcher.ddo.DdoRenderer
 import com.ddomobile.launcher.ddo.DdoSettings
@@ -85,6 +88,7 @@ import com.ddomobile.launcher.ui.ComponentsModel
 import com.ddomobile.launcher.ui.ComponentsTab
 import com.ddomobile.launcher.ui.DdoColors
 import com.ddomobile.launcher.ui.DdoTheme
+import com.ddomobile.launcher.ui.NewsFeed
 import com.ddomobile.launcher.ui.Panel
 import com.ddomobile.launcher.ui.ProtonModel
 import com.ddomobile.launcher.ui.ProtonTab
@@ -115,6 +119,8 @@ class LauncherActivity : ComponentActivity() {
 
     private var worlds by mutableStateOf<List<DdoWorld>>(emptyList())
     private var worldError by mutableStateOf<String?>(null)
+    private var news by mutableStateOf<List<DdoNews.Item>>(emptyList())
+    private var newsError by mutableStateOf<String?>(null)
     private var world by mutableStateOf<String?>(null)
     private var username by mutableStateOf("")
     private var password by mutableStateOf("")
@@ -176,6 +182,7 @@ class LauncherActivity : ComponentActivity() {
         diagnostics = DdoSettings.diagnostics(this)
         setContent { DdoTheme { Screen() } }
         loadWorlds()
+        loadNews()
     }
 
     override fun onResume() {
@@ -201,6 +208,19 @@ class LauncherActivity : ComponentActivity() {
         protonName = protons.selected()
         childLimit = ChildProcessLimit.blocks(this)
         driverName = drivers.selectedLinux()?.let { id -> drivers.installed().firstOrNull { it.id == id }?.name ?: id }
+    }
+
+    /** The last copy of the news at once, then the feed as it is now. */
+    private fun loadNews() {
+        val cache = File(cacheDir, "news-feed.xml")
+        news = DdoNews.cached(cache)
+        Thread({
+            val result = runCatching { DdoNews.fetch(cache) }
+            ui.post {
+                result.onSuccess { news = it; newsError = null }
+                    .onFailure { if (news.isEmpty()) newsError = "The news could not be loaded: ${it.message ?: it.javaClass.simpleName}" }
+            }
+        }, "news").start()
     }
 
     private fun loadWorlds() {
@@ -321,13 +341,17 @@ class LauncherActivity : ComponentActivity() {
                     Text("↑", fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 }
             }
+            // On a screen tall enough, the Play tab stays put and the news takes the room under the login, scrolling
+            // inside its section; on a shorter one (a phone held sideways) the page scrolls, or LOGIN could be cut off.
+            val pinned = tab == PLAY && maxHeight >= 760.dp
             Column(
-                Modifier.fillMaxSize().verticalScroll(scroll).padding(bottom = 20.dp),
+                Modifier.fillMaxSize().then(if (pinned) Modifier else Modifier.verticalScroll(scroll)).padding(bottom = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Header()
                 Column(
-                    Modifier.padding(horizontal = 18.dp).padding(top = 16.dp).widthIn(max = 760.dp).fillMaxWidth(),
+                    Modifier.padding(horizontal = 18.dp).padding(top = 16.dp).widthIn(max = 760.dp).fillMaxWidth()
+                        .then(if (pinned) Modifier.weight(1f) else Modifier),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     TabBar(TABS, tab) { t ->
@@ -342,7 +366,12 @@ class LauncherActivity : ComponentActivity() {
                             SetupPanel()
                             ToolsPanel()
                         }
-                        else -> PlayPanel()
+                        else -> {
+                            PlayPanel(
+                                if (pinned) Modifier.weight(1f) else Modifier,
+                                if (pinned) Modifier.weight(1f, fill = false) else Modifier.heightIn(max = 360.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -366,11 +395,12 @@ class LauncherActivity : ComponentActivity() {
         }
     }
 
+    /** The login, with the news under it in the same section; [modifier] sizes the section, [newsModifier] the news. */
     @Composable
-    private fun PlayPanel() {
+    private fun PlayPanel(modifier: Modifier, newsModifier: Modifier) {
         val session by GameSession.state.collectAsState()
         val running = session is GameSession.State.Running
-        Panel(null) {
+        Panel(null, modifier) {
             OutlinedTextField(username, { username = it }, label = { Text("Username") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth())
@@ -415,6 +445,8 @@ class LauncherActivity : ComponentActivity() {
                     TextButton({ tab = SETUP }) { Text("Open Setup") }
                 }
             }
+            HorizontalDivider(color = DdoColors.Line)
+            NewsFeed(news, newsError, newsModifier)
         }
     }
 
@@ -503,8 +535,8 @@ class LauncherActivity : ComponentActivity() {
                         label = { Text(if (f == DdoSettings.FRAME_LIMIT_OFF) "Off" else "$f") }, colors = ddoChipColors())
                 }
             }
-            Toggle("High-resolution textures", highRes) { highRes = it; DdoSettings.setHighRes(this, it) }
-            Toggle("Performance overlay (DXVK)", hud) { hud = it; DdoSettings.setShowHud(this, it) }
+            Toggle("High-resolution textures", highRes) { highRes = it; DdoSettings.setHighRes(this@LauncherActivity, it) }
+            Toggle("Performance overlay (DXVK)", hud) { hud = it; DdoSettings.setShowHud(this@LauncherActivity, it) }
             Text("FEX speed settings are the FEX preset on the Proton tab.", color = DdoColors.TextDim, fontSize = 12.sp)
         }
     }
@@ -521,7 +553,7 @@ class LauncherActivity : ComponentActivity() {
                 Text("Test launch (no sign-in)")
             }
             Toggle("Performance diagnostics (FEX statistics in the session log)", diagnostics) {
-                diagnostics = it; DdoSettings.setDiagnostics(this, it)
+                diagnostics = it; DdoSettings.setDiagnostics(this@LauncherActivity, it)
             }
             Text("Logs:${Paths(this@LauncherActivity).logs.absolutePath}", color = DdoColors.TextDim, fontSize = 11.sp)
         }
@@ -529,6 +561,7 @@ class LauncherActivity : ComponentActivity() {
 
     private companion object {
         val TABS = listOf("Play", "Graphics", "Components", "Proton", "Setup")
+        const val PLAY = 0
         const val GRAPHICS = 1
         const val COMPONENTS = 2
         const val PROTON = 3

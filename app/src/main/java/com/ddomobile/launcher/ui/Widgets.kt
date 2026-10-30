@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -37,9 +38,9 @@ import kotlinx.coroutines.launch
 
 /** A section of a tab; null leaves out the title, for a section the tab's own name already heads. */
 @Composable
-fun Panel(title: String?, content: @Composable () -> Unit) {
+fun Panel(title: String?, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        Modifier.fillMaxWidth()
+        modifier.fillMaxWidth()
             .background(DdoColors.Panel, RoundedCornerShape(10.dp))
             .border(1.dp, DdoColors.Line, RoundedCornerShape(10.dp))
             .padding(16.dp),
