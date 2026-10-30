@@ -370,7 +370,7 @@ class LauncherActivity : ComponentActivity() {
     private fun PlayPanel() {
         val session by GameSession.state.collectAsState()
         val running = session is GameSession.State.Running
-        Panel("Play") {
+        Panel(null) {
             OutlinedTextField(username, { username = it }, label = { Text("Username") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth())
@@ -385,7 +385,7 @@ class LauncherActivity : ComponentActivity() {
             var open by remember { mutableStateOf(false) }
             Box {
                 OutlinedButton({ open = true }, enabled = worlds.isNotEmpty() && !playing, modifier = Modifier.fillMaxWidth()) {
-                    Text(world?.let { "World: $it" } ?: if (worldError != null) "Servers unavailable" else "Loading worlds…")
+                    Text(world?.let { "World: $it ▾" } ?: if (worldError != null) "Servers unavailable" else "Loading worlds…")
                 }
                 DropdownMenu(open, { open = false }) {
                     worlds.forEach { w -> DropdownMenuItem(text = { Text(w.name) }, onClick = { world = w.name; open = false }) }
@@ -399,13 +399,13 @@ class LauncherActivity : ComponentActivity() {
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(::play, enabled = ready && !playing && username.isNotBlank() && password.isNotEmpty() && world != null,
-                    modifier = Modifier.weight(1f).height(56.dp),
+                    modifier = Modifier.weight(1f).height(56.dp), shape = RoundedCornerShape(6.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = DdoColors.Ember, contentColor = DdoColors.Text)) {
                     if (playing) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = DdoColors.Text)
-                    else Text(if (running) "RETURN TO GAME" else "PLAY", fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                    else Text(if (running) "RETURN TO GAME" else "LOGIN", fontSize = 20.sp, fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Serif, letterSpacing = 3.sp)
                 }
-                if (playing) OutlinedButton({ cancel.set(true) }, Modifier.height(56.dp)) { Text("Cancel") }
+                if (playing) OutlinedButton({ cancel.set(true) }, Modifier.height(56.dp), shape = RoundedCornerShape(6.dp)) { Text("Cancel") }
             }
             playStatus?.let { Text(it, color = DdoColors.TextDim, fontSize = 13.sp) }
             playError?.let { Text(it, color = DdoColors.Ember, fontSize = 13.sp) }
@@ -433,7 +433,7 @@ class LauncherActivity : ComponentActivity() {
 
     @Composable
     private fun SetupPanel() {
-        Panel("Setup") {
+        Panel(null) {
             if (needsSetup && (runtimeVersion != null || runtimeArchive != null)) {
                 Button(::setUpEverything, enabled = busy == null, modifier = Modifier.fillMaxWidth()) { Text("Set up everything") }
             }
@@ -470,7 +470,7 @@ class LauncherActivity : ComponentActivity() {
 
     @Composable
     private fun GraphicsPanel() {
-        Panel("Graphics") {
+        Panel(null) {
             Text("Renderer", color = DdoColors.TextDim, fontSize = 13.sp)
             var rendererOpen by remember { mutableStateOf(false) }
             Box {

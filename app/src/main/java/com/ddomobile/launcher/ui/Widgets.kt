@@ -35,8 +35,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
+/** A section of a tab; null leaves out the title, for a section the tab's own name already heads. */
 @Composable
-fun Panel(title: String, content: @Composable () -> Unit) {
+fun Panel(title: String?, content: @Composable () -> Unit) {
     Column(
         Modifier.fillMaxWidth()
             .background(DdoColors.Panel, RoundedCornerShape(10.dp))
@@ -44,8 +45,10 @@ fun Panel(title: String, content: @Composable () -> Unit) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(title.uppercase(), color = DdoColors.Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp,
-            fontFamily = FontFamily.Serif)
+        if (title != null) {
+            Text(title.uppercase(), color = DdoColors.Gold, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp,
+                fontFamily = FontFamily.Serif)
+        }
         content()
     }
 }

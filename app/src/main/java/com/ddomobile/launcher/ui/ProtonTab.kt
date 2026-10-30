@@ -110,7 +110,7 @@ fun ProtonTab(m: ProtonModel) {
     @Suppress("UNUSED_VARIABLE") val v = optionsVersion.intValue
     val context = LocalContext.current
     val idle = m.jobs.busy == null
-    Panel("Proton") {
+    Panel(null) {
         Text("INSTALLED", color = DdoColors.TextDim, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         if (m.installed.isEmpty()) Text("No Proton yet. Get DroidDeck-Proton below.", color = DdoColors.TextDim, fontSize = 12.sp)
         m.installed.forEach { p ->
@@ -178,9 +178,9 @@ fun ProtonTab(m: ProtonModel) {
     }
 }
 
-/** DroidDeck's FEX presets; also on the Components tab's FEX page. */
+/** DroidDeck's FEX presets. */
 @Composable
-fun FexPresetPicker() {
+private fun FexPresetPicker() {
     @Suppress("UNUSED_VARIABLE") val v = optionsVersion.intValue
     val context = LocalContext.current
     val preset = ProtonOptions.fexPreset(context)

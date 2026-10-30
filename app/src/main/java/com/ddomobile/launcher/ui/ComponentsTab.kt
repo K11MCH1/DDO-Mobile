@@ -190,7 +190,7 @@ private fun ago(seconds: Long): String {
 @Composable
 fun ComponentsTab(m: ComponentsModel) {
     @Suppress("UNUSED_VARIABLE") val v = m.version
-    Panel("Components") {
+    Panel(null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(m.jobs.busy?.let { "$it…" } ?: ago(m.checkedAt), color = DdoColors.TextDim, fontSize = 12.sp, modifier = Modifier.weight(1f))
             TextButton(m::refresh, enabled = m.jobs.busy == null) { Text("Refresh") }
@@ -346,9 +346,6 @@ private fun KindPanel(m: ComponentsModel, kind: ComponentKind) {
                     Text(if (kind == ComponentKind.FEX && m.store.hasRuntimeFex()) "Back to DDO Mobile's build" else "Restore the original")
                 }
             }
-        }
-        if (kind == ComponentKind.FEX) {
-            Group("FEX preset") { FexPresetPicker() }
         }
         val rows = Catalog.rows(m.items, kind, stored.map { it.file }.toSet())
         Group("On the nightlies · ${rows.size}") {
