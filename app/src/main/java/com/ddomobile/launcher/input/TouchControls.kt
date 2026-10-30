@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
@@ -15,6 +16,7 @@ import android.view.View
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -25,14 +27,19 @@ import kotlin.math.min
  * - Dragging turns the camera: the right button is held (DDO's steer) and the finger's movement is sent as relative
  *   mouse motion.
  * - A long press is a right click; holding and then dragging drags with the left button, for moving items in the UI.
- * - A two-finger tap is a right click; two fingers spreading or pinching zoom the camera.
+ * - A two-finger tap is a right click; two fingers spreading or pinching zoom the camera, and two fingers sliding
+ *   together turn the mouse wheel over what is under them, scrolling a list or the chat as the fingers go.
  * - The lower left walks: once a finger there moves, a floating stick appears under it (W/S forward and back, A/D
  *   strafe). A finger that lifts there without moving is a tap like anywhere else.
  * - Buttons press keys: Attack (bound to K), Jump, Target, Run, menus.
  * - Sliding a thumb on Attack turns the camera as a drag on the free screen does, while the attack stays held:
  *   aiming as it swings.
+ * - Sliding a thumb on Eye, above Run, swings the camera around the character without turning the character: DDO's
+ *   drag with the left button on the world.
  * - Cursor, at the left edge, shows the game's cursor and turns the free screen into a trackpad: a drag moves the
  *   cursor by the finger's movement and taps click where the cursor is. It is filled while on.
+ * - The arrows beside ☰ rearrange the buttons: they turn green and follow a finger, and nothing reaches the game.
+ *   Tapping the arrows again keeps the new places, for every game after.
  */
 @SuppressLint("ViewConstructor")
 class TouchControls(context: Context, private val sink: Sink) : View(context) {
@@ -52,8 +59,9 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
         fun menu()
     }
 
+    /** [x] and [y] place the button as fractions of the view; a saved layout replaces them. */
     private class Button(
-        val label: String, val x: Float, val y: Float, val sizeDp: Float, val code: Int, val toggle: Boolean = false,
+        val label: String, var x: Float, var y: Float, val sizeDp: Float, val code: Int, val toggle: Boolean = false,
         val steers: Boolean = false,
     ) {
         var cx = 0f
@@ -61,6 +69,9 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
         var r = 0f
         var pointer = -1
         var on = false
+        /** Where a finger moving the button holds it, from its centre. */
+        var grabX = 0f
+        var grabY = 0f
     }
 
     private val density = resources.displayMetrics.density
@@ -70,14 +81,28 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
         Button("Target", 0.96f, 0.47f, 44f, Keys.TAB),
         Button("Cursor", 0.00f, 0.50f, 48f, CURSOR, toggle = true),
         Button("Run", 0.84f, 0.50f, 40f, Keys.R),
+        Button("Eye", 0.84f, 0.37f, 40f, ORBIT),
         Button("Menu", 0.40f, 0.05f, 30f, Keys.ESC),
         Button("Bag", 0.47f, 0.05f, 30f, Keys.I),
         Button("Map", 0.54f, 0.05f, 30f, Keys.M),
         Button("⌨", 0.61f, 0.05f, 30f, KEYBOARD),
+        Button("Layout", 0.90f, 0.05f, 30f, LAYOUT, toggle = true),
+        // Last: the one button left when the controls are hidden.
         Button("☰", 0.97f, 0.05f, 30f, SETTINGS),
     )
 
-    private val cursor = buttons.first { it.toggle }
+    private val cursor = buttons.first { it.code == CURSOR }
+    private val layoutButton = buttons.first { it.code == LAYOUT }
+    private val layout = context.getSharedPreferences("touch-layout", Context.MODE_PRIVATE)
+    /** Rearranging the buttons: they are green, follow a finger, and send nothing to the game. */
+    private var editing = false
+
+    init {
+        for (b in buttons) {
+            b.x = layout.getFloat("${b.label}.x", b.x)
+            b.y = layout.getFloat("${b.label}.y", b.y)
+        }
+    }
     /** Trackpad mode: the game's cursor is shown and a drag moves it. */
     private val trackpad get() = cursor.on
     /** Where the game's cursor is, in the view's pixels; negative until the first click. */
@@ -85,7 +110,12 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
     private var cursorY = -1f
 
     var controlsVisible = true
-        set(value) { field = value; releaseAll(); invalidate() }
+        set(value) {
+            if (editing) setEditing(false)
+            field = value
+            releaseAll()
+            invalidate()
+        }
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(70, 10, 12, 16) }
     private val pressedFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(140, 200, 160, 60) }
@@ -95,6 +125,13 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(220, 245, 235, 210); textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD
     }
+    private val outline = Paint(text).apply {
+        style = Paint.Style.STROKE; strokeWidth = 2f * resources.displayMetrics.density; strokeCap = Paint.Cap.ROUND
+    }
+    private val editFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(110, 40, 170, 70) }
+    private val editHeldFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(170, 60, 200, 90) }
+    private val editRing = Paint(ring).apply { color = Color.argb(230, 90, 230, 120) }
+    private val icon = Path()
 
     // Movement stick: a finger in the lower left becomes the stick once it moves.
     private var stickPointer = -1
@@ -115,8 +152,25 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
     /** Fingers holding the right button to steer: a drag and a thumb on Attack can do it at once. */
     private var steerHolds = 0
 
+    // The finger on Eye, orbiting the camera once it slides.
+    private var orbitPointer = -1
+    private var orbitActive = false
+    /** The left button is down in the game for the orbit. */
+    private var orbitHeld = false
+    private var orbitDownX = 0f
+    private var orbitDownY = 0f
+    private var orbitLastX = 0f
+    private var orbitLastY = 0f
+    /** Where the trackpad's cursor was before the orbit took it. */
+    private var orbitFromX = -1f
+    private var orbitFromY = -1f
+    private val orbitMove = Runnable { moveTo(width * ORBIT_X, height * ORBIT_Y) }
+    private val orbitPress = Runnable { orbitHeld = true; sink.button(Keys.BTN_LEFT, true) }
+
     // The free screen: one finger is the mouse, a second one makes a two-finger tap or a pinch.
     private enum class Gesture { PENDING, CAMERA, TRACK, LONG, DRAG, PINCH }
+    /** What two fingers on the free screen turn out to be once they move: spreading apart or sliding together. */
+    private enum class TwoFinger { UNDECIDED, ZOOM, SCROLL }
     private var mousePointer = -1
     private var gesture = Gesture.PENDING
     private var downX = 0f
@@ -132,6 +186,10 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
     private var pinchAY = 0f
     private var pinchBX = 0f
     private var pinchBY = 0f
+    private var twoFinger = TwoFinger.UNDECIDED
+    /** The midpoint of two scrolling fingers where the wheel last turned, and when the wheel may first turn. */
+    private var scrollY = 0f
+    private var scrollFrom = 0L
     private val longPress = Runnable {
         if (mousePointer >= 0 && gesture == Gesture.PENDING) {
             gesture = Gesture.LONG
@@ -171,19 +229,66 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
     }
 
     private fun drawButton(canvas: Canvas, b: Button) {
+        val moving = editing && b !== layoutButton
         when {
+            moving -> canvas.drawCircle(b.cx, b.cy, b.r, if (b.pointer >= 0) editHeldFill else editFill)
             b.pointer >= 0 -> canvas.drawCircle(b.cx, b.cy, b.r, pressedFill)
             !b.toggle -> canvas.drawCircle(b.cx, b.cy, b.r, fill)
             b.on -> canvas.drawCircle(b.cx, b.cy, b.r, pressedFill)
         }
-        canvas.drawCircle(b.cx, b.cy, b.r, ring)
-        text.textSize = min(b.r * 0.62f, 15f * density) * if (b.label.length > 3) 0.8f else 1f
-        canvas.drawText(b.label, b.cx, b.cy - (text.descent() + text.ascent()) / 2f, text)
+        canvas.drawCircle(b.cx, b.cy, b.r, if (moving) editRing else ring)
+        when (b.code) {
+            ORBIT -> drawEye(canvas, b)
+            LAYOUT -> drawArrows(canvas, b)
+            else -> {
+                text.textSize = min(b.r * 0.62f, 15f * density) * if (b.label.length > 3) 0.8f else 1f
+                canvas.drawText(b.label, b.cx, b.cy - (text.descent() + text.ascent()) / 2f, text)
+            }
+        }
+    }
+
+    /** An eye: an almond outline around a pupil. */
+    private fun drawEye(canvas: Canvas, b: Button) {
+        val w = b.r * 0.6f
+        val h = b.r * 0.62f
+        icon.reset()
+        icon.moveTo(b.cx - w, b.cy)
+        icon.quadTo(b.cx, b.cy - h, b.cx + w, b.cy)
+        icon.quadTo(b.cx, b.cy + h, b.cx - w, b.cy)
+        icon.close()
+        canvas.drawPath(icon, outline)
+        canvas.drawCircle(b.cx, b.cy, b.r * 0.17f, text)
+    }
+
+    /** Arrows out to all four sides: move. */
+    private fun drawArrows(canvas: Canvas, b: Button) {
+        val arm = b.r * 0.55f
+        val head = b.r * 0.2f
+        icon.reset()
+        for ((dx, dy) in listOf(1f to 0f, -1f to 0f, 0f to 1f, 0f to -1f)) {
+            val tipX = b.cx + dx * arm
+            val tipY = b.cy + dy * arm
+            icon.moveTo(b.cx, b.cy)
+            icon.lineTo(tipX, tipY)
+            icon.moveTo(tipX - dx * head - dy * head, tipY - dy * head + dx * head)
+            icon.lineTo(tipX, tipY)
+            icon.lineTo(tipX - dx * head + dy * head, tipY - dy * head - dx * head)
+        }
+        canvas.drawPath(icon, outline)
     }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         val i = e.actionIndex
+        if (editing) {
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> editDown(e.getPointerId(i), e.getX(i), e.getY(i))
+                MotionEvent.ACTION_MOVE -> for (p in 0 until e.pointerCount) editMove(e.getPointerId(p), e.getX(p), e.getY(p))
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> editUp(e.getPointerId(i))
+                MotionEvent.ACTION_CANCEL -> { for (b in buttons) b.pointer = -1; invalidate() }
+            }
+            return true
+        }
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> down(e.getPointerId(i), e.getX(i), e.getY(i), e)
             MotionEvent.ACTION_MOVE -> for (p in 0 until e.pointerCount) move(e.getPointerId(p), e.getX(p), e.getY(p), e)
@@ -202,6 +307,12 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
                 KEYBOARD -> sink.keyboard()
                 SETTINGS -> sink.menu()
                 CURSOR -> setTrackpad(!b.on)
+                LAYOUT -> setEditing(true)
+                ORBIT -> {
+                    orbitPointer = id
+                    orbitActive = false
+                    orbitDownX = x; orbitDownY = y; orbitLastX = x; orbitLastY = y
+                }
                 else -> sink.key(b.code, true)
             }
             if (b.steers) {
@@ -237,6 +348,7 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
             pinchAX = if (a >= 0) e.getX(a) else downX
             pinchAY = if (a >= 0) e.getY(a) else downY
             pinchBX = x; pinchBY = y
+            twoFinger = TwoFinger.UNDECIDED
         }
     }
 
@@ -250,6 +362,17 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
                 sink.relative((x - aimLastX) * CAMERA_SPEED, (y - aimLastY) * CAMERA_SPEED)
             }
             aimLastX = x; aimLastY = y
+            return
+        }
+        if (id == orbitPointer) {
+            if (!orbitActive) {
+                if (hypot(x - orbitDownX, y - orbitDownY) <= DRAG_SLOP_DP * density) return
+                orbitActive = true
+                startOrbit()
+            } else if (orbitHeld) {
+                sink.relative((x - orbitLastX) * CAMERA_SPEED, (y - orbitLastY) * CAMERA_SPEED)
+            }
+            orbitLastX = x; orbitLastY = y
             return
         }
         if (id == stickPointer) {
@@ -276,10 +399,38 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
                 if (hypot(x - ox, y - oy) > DRAG_SLOP_DP * density) pinchMoved = true
             }
             if (id != mousePointer) return
-            val now = spread(e, mousePointer, pinchPointer)
-            if (now > 0f && abs(now - pinchDistance) > PINCH_STEP_DP * density) {
+            val a = e.findPointerIndex(mousePointer)
+            val b = e.findPointerIndex(pinchPointer)
+            if (a < 0 || b < 0) return
+            val now = hypot(e.getX(a) - e.getX(b), e.getY(a) - e.getY(b))
+            val midY = (e.getY(a) + e.getY(b)) / 2f
+            if (twoFinger == TwoFinger.UNDECIDED) {
+                val startX = (pinchAX + pinchBX) / 2f
+                val startY = (pinchAY + pinchBY) / 2f
+                val apart = abs(now - pinchDistance)
+                val slide = hypot((e.getX(a) + e.getX(b)) / 2f - startX, midY - startY)
+                if (max(apart, slide) <= DRAG_SLOP_DP * density) return
+                if (apart > slide) {
+                    twoFinger = TwoFinger.ZOOM
+                } else {
+                    twoFinger = TwoFinger.SCROLL
+                    // The wheel turns what is under the fingers, once the game has seen the cursor there.
+                    if (!trackpad) moveTo(startX, startY)
+                    scrollY = startY
+                    scrollFrom = SystemClock.uptimeMillis() + CLICK_HOVER_MS
+                }
+            }
+            if (twoFinger == TwoFinger.ZOOM && abs(now - pinchDistance) > PINCH_STEP_DP * density) {
                 sink.scroll(if (now > pinchDistance) 1f else -1f)
                 pinchDistance = now
+            } else if (twoFinger == TwoFinger.SCROLL && SystemClock.uptimeMillis() >= scrollFrom) {
+                // Content follows the fingers: sliding down turns the wheel up, toward the top of a list.
+                val step = SCROLL_STEP_DP * density
+                val steps = ((midY - scrollY) / step).toInt()
+                if (steps != 0) {
+                    sink.scroll(steps.toFloat())
+                    scrollY += steps * step
+                }
             }
             return
         }
@@ -323,6 +474,7 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
             b.pointer = -1
             if (b.code >= 0) sink.key(b.code, false)
             if (id == aimPointer) endAim()
+            if (id == orbitPointer) endOrbit()
             invalidate()
             return
         }
@@ -397,6 +549,52 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
         sink.cursorShown(on)
     }
 
+    /** Starts rearranging the buttons, or ends it and keeps where they are. */
+    private fun setEditing(on: Boolean) {
+        releaseAll()
+        editing = on
+        layoutButton.on = on
+        if (!on) saveLayout()
+        invalidate()
+    }
+
+    private fun editDown(id: Int, x: Float, y: Float) {
+        val b = buttons.firstOrNull { it.pointer < 0 && hypot(x - it.cx, y - it.cy) <= it.r * 1.15f } ?: return
+        if (b === layoutButton) {
+            performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            setEditing(false)
+            return
+        }
+        b.pointer = id
+        b.grabX = x - b.cx
+        b.grabY = y - b.cy
+        invalidate()
+    }
+
+    private fun editMove(id: Int, x: Float, y: Float) {
+        val b = buttons.firstOrNull { it.pointer == id } ?: return
+        b.cx = (x - b.grabX).coerceIn(b.r, width - b.r)
+        b.cy = (y - b.grabY).coerceIn(b.r, height - b.r)
+        invalidate()
+    }
+
+    private fun editUp(id: Int) {
+        buttons.firstOrNull { it.pointer == id }?.pointer = -1
+        invalidate()
+    }
+
+    /** Each button's place as fractions of the view, so the layout fits the screen it comes back on. */
+    private fun saveLayout() {
+        if (width == 0 || height == 0) return
+        val edit = layout.edit()
+        for (b in buttons) {
+            b.x = b.cx / width
+            b.y = b.cy / height
+            edit.putFloat("${b.label}.x", b.x).putFloat("${b.label}.y", b.y)
+        }
+        edit.apply()
+    }
+
     private fun endMouseGesture() {
         removeCallbacks(longPress)
         when (gesture) {
@@ -420,6 +618,34 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
             steer(false)
         }
         aimPointer = -1
+    }
+
+    /**
+     * DDO swings the camera around the character while the left button is held on the world. The cursor goes above
+     * the character, where the world nearly always is, and the press waits for the game to see it there.
+     */
+    private fun startOrbit() {
+        val start = maxOf(SystemClock.uptimeMillis(), clicksFreeAt)
+        orbitFromX = cursorX
+        orbitFromY = cursorY
+        clicks.postAtTime(orbitMove, start)
+        clicks.postAtTime(orbitPress, start + CLICK_HOVER_MS)
+        clicksFreeAt = start + CLICK_HOVER_MS
+    }
+
+    private fun endOrbit() {
+        if (orbitActive) {
+            orbitActive = false
+            // A press still to come is dropped: pressed and released at once, it would be a click on the world.
+            clicks.removeCallbacks(orbitMove)
+            clicks.removeCallbacks(orbitPress)
+            if (orbitHeld) {
+                orbitHeld = false
+                sink.button(Keys.BTN_LEFT, false)
+            }
+            if (trackpad && orbitFromX >= 0f) moveTo(orbitFromX, orbitFromY)
+        }
+        orbitPointer = -1
     }
 
     /** Eight sectors around the stick; a diagonal holds both of its keys. */
@@ -459,9 +685,11 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
         }
         for (b in buttons) if (b.pointer >= 0) {
             b.pointer = -1
-            if (b.code >= 0) sink.key(b.code, false)
+            // A finger moving a button pressed nothing.
+            if (b.code >= 0 && !editing) sink.key(b.code, false)
         }
         endAim()
+        endOrbit()
         if (stickPointer >= 0) {
             stickPointer = -1
             if (stickActive) { stickActive = false; updateStick(0f, 0f, 0f) }
@@ -481,10 +709,17 @@ class TouchControls(context: Context, private val sink: Sink) : View(context) {
         private const val KEYBOARD = -1
         private const val SETTINGS = -2
         private const val CURSOR = -3
+        private const val ORBIT = -4
+        private const val LAYOUT = -5
+        /** Where an orbit holds the button: above the character, below the target's name. */
+        private const val ORBIT_X = 0.5f
+        private const val ORBIT_Y = 0.32f
         private const val STICK_RADIUS_DP = 64f
         private const val DEADZONE = 0.25f
         private const val DRAG_SLOP_DP = 10f
         private const val PINCH_STEP_DP = 24f
+        /** How far two sliding fingers go for one turn of the wheel. */
+        private const val SCROLL_STEP_DP = 20f
         private const val LONG_PRESS_MS = 450L
         private const val TWO_FINGER_TAP_MS = 300L
         private const val CAMERA_SPEED = 1.0f
