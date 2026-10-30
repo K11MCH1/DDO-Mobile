@@ -4,7 +4,6 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -147,7 +146,7 @@ fun ProtonTab(m: ProtonModel) {
         Text("Wine sync", color = DdoColors.Text, fontSize = 14.sp)
         Text("How the game keeps its threads in step. Applies the next time the game starts.", color = DdoColors.TextDim, fontSize = 12.sp)
         val sync = ProtonOptions.wineSync(context)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ScrollingRow(verticalAlignment = Alignment.CenterVertically) {
             WineSync.entries.forEach { s ->
                 FilterChip(s == sync, { m.setSync(s) }, label = { Text(s.label, softWrap = false) }, colors = ddoChipColors())
             }
