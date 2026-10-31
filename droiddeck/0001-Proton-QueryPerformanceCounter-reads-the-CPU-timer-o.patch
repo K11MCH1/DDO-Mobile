@@ -1,0 +1,223 @@
+From 888d666d80e3f879730112b5bae87a1ce34e7d02 Mon Sep 17 00:00:00 2001
+From: K11MCH1 <81425424+K11MCH1@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 09:33:58 +0900
+Subject: [PATCH] Proton: QueryPerformanceCounter reads the CPU timer on
+ ARM64EC
+
+Windows on ARM answers QueryPerformanceCounter from the generic timer
+(cntvct_el0) without leaving user space. Wine's ARM64EC ntdll makes a system
+call for every one, through FEX's syscall callback and Wine's dispatcher into
+clock_gettime. DroidDeck-Proton's user-mode TSC patch excludes ARM64EC, so
+phones still pay for every read.
+
+droiddeck-qpc-timer points the Windows side's RtlQueryPerformanceCounter,
+RtlQueryPerformanceFrequency (cntfrq_el0) and NtQueryPerformanceCounter stub
+at the timer, in an ntdll.dll whose SHA-256 and original bytes it knows
+(DroidDeck-Proton 11-11.9), keeping the Proton's file as ntdll.dll.orig.
+Wine's Linux side keeps its own 100 ns counter. The Proton wrapper runs it
+right after the component swaps, for game launches only, and it never fails
+a launch.
+
+From DDO Mobile, where Dungeons & Dragons Online's game thread spent 5.1% of
+a world load reading the clock, and 0.06% with the timer.
+---
+ .../overlay/usr/local/bin/droiddeck-qpc-timer | 94 +++++++++++++++++++
+ .../overlay/usr/local/bin/steam-compatibility | 14 ++-
+ tools/tests/test_game_environment.py          | 27 ++++++
+ 3 files changed, 133 insertions(+), 2 deletions(-)
+ create mode 100755 tools/linuxfs/overlay/usr/local/bin/droiddeck-qpc-timer
+
+diff --git a/tools/linuxfs/overlay/usr/local/bin/droiddeck-qpc-timer b/tools/linuxfs/overlay/usr/local/bin/droiddeck-qpc-timer
+new file mode 100755
+index 00000000..2b377daa
+--- /dev/null
++++ b/tools/linuxfs/overlay/usr/local/bin/droiddeck-qpc-timer
+@@ -0,0 +1,94 @@
++#!/usr/bin/env python3
++"""Points an ARM64EC Proton's QueryPerformanceCounter at the CPU's generic timer.
++
++    droiddeck-qpc-timer PROTON_DIR
++
++Windows on ARM answers QueryPerformanceCounter from the generic timer (cntvct_el0) without leaving user space. Wine's
++ARM64EC ntdll makes a system call for every one, through the BT module's syscall callback and Wine's dispatcher into
++clock_gettime, and games that read the clock constantly pay for it: Dungeons & Dragons Online calls it hundreds of
++thousands of times a second while it loads, 5.1% of its game thread, and 0.06% with the timer.
++
++The Windows side's RtlQueryPerformanceCounter, RtlQueryPerformanceFrequency (cntfrq_el0) and NtQueryPerformanceCounter
++system call stub read the timer instead. Wine's Linux side keeps its own 100 ns counter, which its timeouts are built
++on, and its Windows-side users all take the frequency along with the counter.
++
++Only an ntdll.dll whose SHA-256 and original bytes are known below is changed, and the Proton's own file is kept
++beside it as ntdll.dll.orig; anything else is left alone. It never fails a launch.
++"""
++import hashlib
++import os
++import shutil
++import stat
++import sys
++
++# ntdll.dll builds by SHA-256 -> (file offset, original bytes, new bytes).
++NTDLL_TIMER = {
++    # DroidDeck-Proton 11-11.9
++    "18e970a8d2fdde2496d197b52eb80e87626e169a00b986dbe2c3d918839cfaf6": [
++        # #RtlQueryPerformanceCounter: mrs x8, cntvct_el0; str x8, [x0]; mov w0, #1; ret
++        (0xdf350, "fd7bbfa9fd030091e1031faaed470094", "48e03bd5080000f920008052c0035fd6"),
++        # #RtlQueryPerformanceFrequency: mrs x8, cntfrq_el0; str x8, [x0]; mov w0, #1; ret
++        (0xdf370, "08d092520813a072080000f920008052", "08e03bd5080000f920008052c0035fd6"),
++        # #NtQueryPerformanceCounter$hp_target (the system call stub): both from the timer, STATUS_SUCCESS
++        (0xccbe0, "280680d2e9031eaa50ba41f9700000b4100640f9700000b5d0040090",
++         "48e03bd5080000f9610000b408e03bd5280000f9e0031f2ac0035fd6"),
++    ],
++}
++
++
++def say(message):
++    print("droiddeck-qpc-timer: %s" % message, file=sys.stderr, flush=True)
++
++
++def put_in_place(path, data):
++    """Replaces path with data, keeping the original beside it as .orig. False when it already holds data."""
++    with open(path, "rb") as f:
++        if f.read() == data:
++            return False
++    original = path + ".orig"
++    if not os.path.isfile(original):
++        shutil.copy2(path, original)
++    staged = path + ".qpc-new"
++    with open(staged, "wb") as f:
++        f.write(data)
++    os.chmod(staged, stat.S_IMODE(os.stat(original).st_mode))
++    os.replace(staged, path)
++    return True
++
++
++def patch_ntdll_timer(proton_dir):
++    name = os.path.basename(os.path.normpath(proton_dir))
++    path = os.path.join(proton_dir, "files", "lib", "wine", "aarch64-windows", "ntdll.dll")
++    if not os.path.isfile(path):
++        return
++    original = path + ".orig"
++    with open(original if os.path.isfile(original) else path, "rb") as f:
++        stock = f.read()
++    patches = NTDLL_TIMER.get(hashlib.sha256(stock).hexdigest())
++    if patches is None:
++        say("keeping %s's own QueryPerformanceCounter: not an ntdll.dll this knows" % name)
++        return
++    patched = bytearray(stock)
++    for offset, old, new in patches:
++        old, new = bytes.fromhex(old), bytes.fromhex(new)
++        if stock[offset:offset + len(old)] != old:
++            say("keeping %s's own QueryPerformanceCounter: ntdll.dll differs at %#x" % (name, offset))
++            return
++        patched[offset:offset + len(new)] = new
++    if put_in_place(path, bytes(patched)):
++        say("%s: QueryPerformanceCounter reads the CPU timer" % name)
++
++
++def main(argv):
++    if len(argv) != 1:
++        say("usage: droiddeck-qpc-timer PROTON_DIR")
++        return 0
++    try:
++        patch_ntdll_timer(argv[0])
++    except OSError as error:
++        say("left the Proton as it was: %s" % error)
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv[1:]))
+diff --git a/tools/linuxfs/overlay/usr/local/bin/steam-compatibility b/tools/linuxfs/overlay/usr/local/bin/steam-compatibility
+index 47c83fbd..ca561eb7 100755
+--- a/tools/linuxfs/overlay/usr/local/bin/steam-compatibility
++++ b/tools/linuxfs/overlay/usr/local/bin/steam-compatibility
+@@ -288,6 +288,14 @@ case "$verb:${1##*/}:${STEAM_COMPAT_DATA_PATH%/}" in
+ esac
+ """
+ 
++BL_QPC_TIMER_SETUP = """
++bl_qpc_timer() {
++  [ "${verb:-}" = waitforexitandrun ] || return 0
++  command -v droiddeck-qpc-timer >/dev/null 2>&1 || return 0
++  droiddeck-qpc-timer "$1" || true
++}
++"""
++
+ BL_DIRECTAUDIO_SETUP = """
+ bl_is_steam_installscript_target() {
+   local target=${1:-}
+@@ -402,6 +410,7 @@ for name in %s; do
+ done
+ if [ -n "$depot" ]; then
+   bl_components "$depot"
++  bl_qpc_timer "$depot"
+   bl_directaudio "$depot" "$@"
+   bl_game_cpus
+   bl_idtech3 "$@"
+@@ -421,7 +430,7 @@ LAUNCHER_TEMPLATE = LAUNCHER_SH
+ def launcher_sh(sources=SOURCES):
+     return (LAUNCHER_TEMPLATE % " ".join('"%s"' % n for n in sources)).replace(
+         "verb=$1; shift", "verb=$1; shift\n" + BL_DRIVER_QUERY_SKIP + BL_DESKTOP_GPU_SETUP + BL_DIRECTAUDIO_SETUP + BL_GAME_CPUS_SETUP + BL_IDTECH3_SETUP
+-        + BL_VACDIAG_SETUP + BL_COMPONENTS_SETUP + BL_LIBPATH_SETUP + BL_STORE_SETUP, 1)
++        + BL_VACDIAG_SETUP + BL_COMPONENTS_SETUP + BL_QPC_TIMER_SETUP + BL_LIBPATH_SETUP + BL_STORE_SETUP, 1)
+ 
+ 
+ LAUNCHER_SH = launcher_sh()
+@@ -457,6 +466,7 @@ if [ -n "${PROOT_FP_KEY:-}" ] && [ -f "$audit" ]; then
+   esac
+ fi
+ bl_components "$here"
++bl_qpc_timer "$here"
+ bl_directaudio "$here" "$@"
+ bl_game_cpus
+ bl_idtech3 "$@"
+@@ -473,7 +483,7 @@ def extra_wrapper_sh(entry_point):
+     return (EXTRA_WRAPPER_SH % entry_point).replace(
+         'here=$(dirname "$0")',
+         'here=$(dirname "$0")\n' + BL_DRIVER_QUERY_SKIP + BL_DESKTOP_GPU_SETUP + BL_DIRECTAUDIO_SETUP + BL_GAME_CPUS_SETUP
+-        + BL_IDTECH3_SETUP + BL_VACDIAG_SETUP + BL_COMPONENTS_SETUP + BL_LIBPATH_SETUP + BL_STORE_SETUP, 1)
++        + BL_IDTECH3_SETUP + BL_VACDIAG_SETUP + BL_COMPONENTS_SETUP + BL_QPC_TIMER_SETUP + BL_LIBPATH_SETUP + BL_STORE_SETUP, 1)
+ 
+ 
+ EXTRA_COMPAT_TOOL_VDF = """"compatibilitytools"
+diff --git a/tools/tests/test_game_environment.py b/tools/tests/test_game_environment.py
+index 1f178c0f..aa25e0c6 100644
+--- a/tools/tests/test_game_environment.py
++++ b/tools/tests/test_game_environment.py
+@@ -1696,6 +1696,33 @@ class UbisoftOverlayTest(unittest.TestCase):
+             self.assertEqual(sorted(p.name for p in settings.parent.iterdir()), ["settings.yaml"])
+ 
+ 
++class QpcTimerTest(unittest.TestCase):
++    TIMER = runpy.run_path(str(BIN / "droiddeck-qpc-timer"))
++
++    def test_wrappers_point_the_timer_after_the_component_swaps(self):
++        for script in (COMPAT["launcher_sh"](), COMPAT["extra_wrapper_sh"]("proton")):
++            self.assertIn("bl_qpc_timer() {", script)
++            self.assertLess(script.index('bl_components "'), script.index('bl_qpc_timer "'))
++
++    def test_only_a_known_ntdll_changes_and_its_original_is_kept(self):
++        with tempfile.TemporaryDirectory() as root:
++            wine = Path(root, "files/lib/wine/aarch64-windows")
++            wine.mkdir(parents=True)
++            ntdll = wine / "ntdll.dll"
++            stock = bytes(range(256)) * 4
++            ntdll.write_bytes(stock)
++            patch = self.TIMER["patch_ntdll_timer"]
++            patch(root)
++            self.assertEqual(ntdll.read_bytes(), stock)
++            self.assertFalse((wine / "ntdll.dll.orig").exists())
++            known = {hashlib.sha256(stock).hexdigest(): [(4, stock[4:8].hex(), "c0035fd6")]}
++            with mock.patch.dict(self.TIMER["NTDLL_TIMER"], known, clear=True):
++                patch(root)
++                patch(root)
++            self.assertEqual((wine / "ntdll.dll.orig").read_bytes(), stock)
++            self.assertEqual(ntdll.read_bytes(), stock[:4] + bytes.fromhex("c0035fd6") + stock[8:])
++
++
+ if __name__ == "__main__":
+     unittest.main()
+ 
+-- 
+2.55.0.windows.5
+
