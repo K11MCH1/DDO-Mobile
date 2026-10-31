@@ -32,13 +32,24 @@ android {
             keyAlias 'debug'
             keyPassword 'android'
         }
+        // The maintainer's release key, named in ~/.gradle/gradle.properties; it is never in the repository.
+        if (project.hasProperty('ddoMobileReleaseStoreFile')) {
+            release {
+                storeFile file(project.property('ddoMobileReleaseStoreFile'))
+                storeType 'PKCS12'
+                storePassword project.property('ddoMobileReleaseStorePassword')
+                keyAlias project.property('ddoMobileReleaseKeyAlias')
+                keyPassword project.property('ddoMobileReleaseStorePassword')
+            }
+        }
     }
 
     buildTypes {
         debug { signingConfig signingConfigs.debug }
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            // Anyone else's release build is signed with the public debug key, so it still installs.
+            signingConfig signingConfigs.findByName('release') ?: signingConfigs.debug
         }
     }
 

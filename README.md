@@ -228,7 +228,7 @@ rest of this repository.
 
 | Part | How |
 |---|---|
-| **App** | `./gradlew assembleRelease` (Android SDK and NDK; the APK lands in `app/build/outputs/apk/release/`) |
+| **App** | `./gradlew assembleRelease` (Android SDK and NDK; the APK lands in `app/build/outputs/apk/release/`). Official releases are signed with a private key named in `~/.gradle/gradle.properties` (`ddoMobileReleaseStoreFile`, `ddoMobileReleaseStorePassword`, `ddoMobileReleaseKeyAlias`); without it, a release build is signed with the public debug key in `keystore/`. |
 | **Runtime** | `runtime/build.sh OUTDIR VERSION` on any aarch64 Arch Linux ARM system, or `runtime/tools/build-on-phone.sh VERSION` to use a phone over adb |
 | **FEX** | `runtime/fex/build.sh` on Windows (Git Bash) or Linux; the runtime build puts the result in the image |
 
