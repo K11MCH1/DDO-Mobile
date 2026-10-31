@@ -1,0 +1,71 @@
+From d6fdf16815013ed438e04f4aac7ef029dddd476f Mon Sep 17 00:00:00 2001
+From: K11MCH1 <81425424+K11MCH1@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 09:35:03 +0900
+Subject: [PATCH] Game environment: Turnip maps CPU-read GPU memory cached
+
+On KGSL, Turnip maps the host-visible memory the CPU reads back uncached, so
+a game that reads it on the CPU crawls: Dungeons & Dragons Online's graphics
+start-up spent minutes there. Game launches now set
+tu_override_uncached_as_cache_coherent=true, which maps that memory cached
+and coherent instead. A value the game's environment or its profile already
+sets is kept.
+
+From DDO Mobile, which has set it for every session since its first run.
+---
+ .../linuxfs/overlay/usr/local/bin/droiddeck-game-env  | 10 ++++++++++
+ tools/tests/test_game_environment.py                  | 11 +++++++++++
+ 2 files changed, 21 insertions(+)
+
+diff --git a/tools/linuxfs/overlay/usr/local/bin/droiddeck-game-env b/tools/linuxfs/overlay/usr/local/bin/droiddeck-game-env
+index 696a9558..c4228c7d 100755
+--- a/tools/linuxfs/overlay/usr/local/bin/droiddeck-game-env
++++ b/tools/linuxfs/overlay/usr/local/bin/droiddeck-game-env
+@@ -456,6 +456,15 @@ def game_images(env):
+     return True
+ 
+ 
++def turnip_cached_memory(env):
++    """Turnip maps the GPU memory the CPU reads uncached on KGSL, so a game that reads it back crawls (Dungeons &
++    Dragons Online's graphics start-up took minutes). It is mapped cached and coherent instead."""
++    if game_id(env) is None:
++        return False
++    env.setdefault("tu_override_uncached_as_cache_coherent", "true")
++    return True
++
++
+ def apply_config(env, config, app_id, fixes=None):
+     if config.get("version") != 1:
+         raise ValueError("unsupported environment configuration")
+@@ -757,6 +766,7 @@ def main():
+         waiting = len(command) > 1 and command[1] == "waitforexitandrun"
+         if waiting:
+             game_images(env)
++            turnip_cached_memory(env)
+         fixes = {}
+         if waiting:
+             command = skip_red_launcher(command)
+diff --git a/tools/tests/test_game_environment.py b/tools/tests/test_game_environment.py
+index 1f178c0f..fcde2709 100644
+--- a/tools/tests/test_game_environment.py
++++ b/tools/tests/test_game_environment.py
+@@ -617,6 +617,17 @@ class GameEnvironmentTest(unittest.TestCase):
+             self.assertFalse(MODULE["game_images"](env))
+             self.assertNotIn("GAMESCOPE_WSI_MIN_IMAGE_COUNT", env)
+ 
++    def test_only_games_get_cached_turnip_memory(self):
++        game = {"STEAM_COMPAT_DATA_PATH": "/steam/compatdata/945360"}
++        self.assertTrue(MODULE["turnip_cached_memory"](game))
++        self.assertEqual(game["tu_override_uncached_as_cache_coherent"], "true")
++        own = {"STEAM_COMPAT_DATA_PATH": "/steam/compatdata/945360", "tu_override_uncached_as_cache_coherent": "false"}
++        MODULE["turnip_cached_memory"](own)
++        self.assertEqual(own["tu_override_uncached_as_cache_coherent"], "false")
++        for env in ({}, {"STEAM_COMPAT_DATA_PATH": "/steam/compatdata/0"}):
++            self.assertFalse(MODULE["turnip_cached_memory"](env))
++            self.assertNotIn("tu_override_uncached_as_cache_coherent", env)
++
+     def test_opengl_games_do_not_wait_for_the_screen_refresh(self):
+         cases = [
+             ({}, "0"),
+-- 
+2.55.0.windows.5
+
